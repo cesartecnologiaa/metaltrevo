@@ -1,0 +1,224 @@
+// Arquivo temporário para correção - será integrado no Reports.tsx
+
+import { formatCurrency } from '@/lib/formatters';
+
+const exportToPDF = async () => {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+  
+  const reportTitles: Record<ReportType, string> = {
+    sales: 'Relatório de Vendas',
+    products: 'Relatório de Produtos',
+    cashflow: 'Relatório de Fluxo de Caixa',
+    sellers: 'Relatório de Vendedores',
+    accounts_paid: 'Relatório de Contas Pagas',
+  };
+
+  const subtitle = (startDate && endDate) 
+    ? `Período: ${format(new Date(startDate), 'dd/MM/yyyy')} a ${format(new Date(endDate), 'dd/MM/yyyy')}`
+    : undefined;
+
+  // Adicionar cabeçalho padrão
+  let yPos = await addPDFHeader(doc, settings, reportTitles[reportType], subtitle);
+
+  // Resumo
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RESUMO', 15, yPos);
+  yPos += 7;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+
+  if (reportType === 'sales') {
+    doc.text(`Total de Vendas: ${summary.totalSales}`, 15, yPos);
+    yPos += 5;
+    doc.text(`Faturamento Total: ${formatCurrency(summary.totalRevenue || 0)}`, 15, yPos);
+    yPos += 5;
+    doc.text(`Ticket Médio: ${formatCurrency(summary.averageTicket || 0)}`, 15, yPos);
+    yPos += 10;
+  } else if (reportType === 'products') {
+    doc.text(`Total de Produtos: ${summary.totalProducts}`, 15, yPos);
+    yPos += 5;
+    doc.text(`Produtos com Estoque Baixo: ${summary.lowStockProducts}`, 15, yPos);
+    yPos += 5;
+    doc.text(`Valor Total em Estoque: ${formatCurrency(summary.totalStockValue || 0)}`, 15, yPos);
+    yPos += 10;
+  } else if (reportType === 'cashflow') {
+    doc.text(`Total de Caixas: ${summary.cashRegistersCount}`, 15, yPos);
+    yPos += 5;
+    doc.text(`Receita Total: ${formatCurrency(summary.totalRevenue || 0)}`, 15, yPos);
+    yPos += 5;
+    doc.text(`Sangrias: ${formatCurrency(summary.totalWithdrawals || 0)}`, 15, yPos);
+    yPos += 5;
+    doc.text(`Fluxo Líquido: ${formatCurrency(summary.netCashflow || 0)}`, 15, yPos);
+    yPos += 10;
+  } else if (reportType === 'sellers') {
+    doc.text(`Total de Vendedores: ${summary.totalSellers}`, 15, yPos);
+    yPos += 5;
+    doc.text(`Total de Vendas: ${summary.totalSales}`, 15, yPos);
+    yPos += 5;
+    doc.text(`Faturamento Total: ${formatCurrency(summary.totalRevenue || 0)}`, 15, yPos);
+    yPos += 10;
+  } else if (reportType === 'accounts_paid') {
+    doc.text(`Total de Contas: ${summary.totalAccounts}`, 15, yPos);
+    yPos += 5;
+    doc.text(`Total Pago: ${formatCurrency(summary.totalPaid || 0)}`, 15, yPos);
+    yPos += 10;
+  }
+
+  // Tabelas detalhadas com margens A4
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const marginLeft = 15;
+  const marginRight = 15;
+  const tableWidth = pageWidth - marginLeft - marginRight;
+
+  if (reportType === 'sales') {
+    const tableData = reportData.map((sale: any) => [
+      format(sale.createdAt, 'dd/MM/yyyy HH:mm'),
+      `#${sale.saleNumber}`,
+      sale.clientName || 'Não informado',
+      sale.items?.map((item: any) => `${item.productName} (x${item.quantity})`).join(', ') || '',
+      sale.paymentMethod === 'dinheiro' ? 'Dinheiro' :
+      sale.paymentMethod === 'cartao_credito' ? 'Cartão Créd.' :
+      sale.paymentMethod === 'cartao_debito' ? 'Cartão Déb.' :
+      sale.paymentMethod === 'pix' ? 'PIX' : 'Boleto',
+      formatCurrency(sale.total || 0),
+    ]);
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Data', 'Nº Venda', 'Cliente', 'Produtos', 'Pagamento', 'Total']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [59, 130, 246], fontSize: 9 },
+      styles: { fontSize: 8, cellPadding: 2 },
+      margin: { left: marginLeft, right: marginRight },
+      tableWidth: 'auto',
+      columnStyles: {
+        0: { cellWidth: 30 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 30 },
+        3: { cellWidth: 60 },
+        4: { cellWidth: 25 },
+        5: { cellWidth: 'auto', halign: 'right' },
+      },
+    });
+  } else if (reportType === 'sellers') {
+    const tableData = reportData.map((seller: any) => [
+      seller.name,
+      seller.sales.toString(),
+      formatCurrency(seller.revenue || 0),
+      formatCurrency((seller.revenue / seller.sales) || 0),
+    ]);
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Vendedor', 'Vendas', 'Faturamento', 'Ticket Médio']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [59, 130, 246], fontSize: 9 },
+      styles: { fontSize: 8, cellPadding: 2 },
+      margin: { left: marginLeft, right: marginRight },
+      tableWidth: 'auto',
+      columnStyles: {
+        1: { halign: 'center' },
+        2: { halign: 'right' },
+        3: { halign: 'right' },
+      },
+    });
+  } else if (reportType === 'products') {
+    const tableData = reportData.map((product: any) => [
+      product.name,
+      product.code || '-',
+      (product.currentStock || 0).toString(),
+      (product.minStock || 0).toString(),
+      formatCurrency(product.price || 0),
+      formatCurrency((product.currentStock || 0) * (product.price || 0)),
+    ]);
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Produto', 'Código', 'Estoque', 'Mín.', 'Preço', 'Valor Total']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [59, 130, 246], fontSize: 9 },
+      styles: { fontSize: 8, cellPadding: 2 },
+      margin: { left: marginLeft, right: marginRight },
+      tableWidth: 'auto',
+      columnStyles: {
+        2: { halign: 'center' },
+        3: { halign: 'center' },
+        4: { halign: 'right' },
+        5: { halign: 'right' },
+      },
+    });
+  } else if (reportType === 'cashflow') {
+    const tableData = reportData.map((cash: any) => [
+      format(cash.openedAt, 'dd/MM/yyyy HH:mm'),
+      cash.closedAt ? format(cash.closedAt, 'dd/MM/yyyy HH:mm') : '-',
+      cash.openedByName,
+      formatCurrency(cash.openingBalance || 0),
+      formatCurrency(cash.totalSales || 0),
+      formatCurrency(cash.totalWithdrawals || 0),
+      formatCurrency(cash.closingBalance || 0),
+    ]);
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Abertura', 'Fechamento', 'Operador', 'Saldo Inicial', 'Vendas', 'Sangrias', 'Saldo Final']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [59, 130, 246], fontSize: 9 },
+      styles: { fontSize: 7, cellPadding: 2 },
+      margin: { left: marginLeft, right: marginRight },
+      tableWidth: 'auto',
+      columnStyles: {
+        0: { cellWidth: 28 },
+        1: { cellWidth: 28 },
+        2: { cellWidth: 'auto' },
+        3: { halign: 'right' },
+        4: { halign: 'right' },
+        5: { halign: 'right' },
+        6: { halign: 'right' },
+      },
+    });
+  } else if (reportType === 'accounts_paid') {
+    const tableData = reportData.map((account: any) => [
+      format(account.paidAt, 'dd/MM/yyyy'),
+      account.description,
+      account.supplierName || '-',
+      account.installment,
+      account.paidByName,
+      formatCurrency(account.amount || 0),
+    ]);
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Data Pgto', 'Descrição', 'Fornecedor', 'Parcela', 'Pago Por', 'Valor']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [59, 130, 246], fontSize: 9 },
+      styles: { fontSize: 8, cellPadding: 2 },
+      margin: { left: marginLeft, right: marginRight },
+      tableWidth: 'auto',
+      columnStyles: {
+        0: { cellWidth: 25 },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 20, halign: 'center' },
+        4: { cellWidth: 30 },
+        5: { halign: 'right' },
+      },
+    });
+  }
+
+  // Adicionar rodapé
+  addPDFFooter(doc);
+
+  doc.save(`${reportTitles[reportType]}.pdf`);
+  toast.success('Relatório exportado com sucesso!');
+};

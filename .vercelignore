@@ -1,0 +1,10 @@
+node_modules
+.git
+.vite
+dist
+screenshots
+.env
+.env.local
+*.log
+.DS_Store
+.manus-logs

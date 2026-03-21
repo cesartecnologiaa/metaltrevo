@@ -1,0 +1,47 @@
+import { initializeApp } from "firebase/app";
+import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+import { getAnalytics } from "firebase/analytics";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAVWPIRCMhK_WlNqrBBe-Np12uWsemYUwI",
+  authDomain: "erp-metal-trevo.firebaseapp.com",
+  projectId: "erp-metal-trevo",
+  storageBucket: "erp-metal-trevo.firebasestorage.app",
+  messagingSenderId: "1058221220442",
+  appId: "1:1058221220442:web:a6d05699d2d9ad2bf06e63",
+  measurementId: "G-8TTWCK9PLN"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+// Initialize Firebase Auth with persistence
+export const auth = getAuth(app);
+setPersistence(auth, browserLocalPersistence);
+
+// Segunda instância do Auth para criar usuários sem afetar a sessão atual
+// Usada apenas para operações administrativas de criação de usuários
+const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
+export const secondaryAuth = getAuth(secondaryApp);
+
+// Initialize Firestore with offline persistence
+export const db = getFirestore(app);
+
+// Initialize Firebase Storage
+export const storage = getStorage(app);
+
+// Enable offline persistence for Firestore
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    console.warn('Firestore persistence failed: Multiple tabs open');
+  } else if (err.code === 'unimplemented') {
+    console.warn('Firestore persistence not available in this browser');
+  }
+});
+
+// Initialize Analytics
+export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+
+export default app;
