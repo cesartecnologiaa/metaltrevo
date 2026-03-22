@@ -3,7 +3,7 @@ import { Plus, Search, Edit, Trash2, Tag, CheckCircle, XCircle } from 'lucide-re
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -339,15 +339,15 @@ export default function Categories() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
           <DialogHeader>
-  <DialogTitle className="text-2xl font-bold text-white">
-    {editingCategory ? 'Editar Categoria' : 'Nova Categoria'}
-  </DialogTitle>
-  <DialogDescription className="text-white/70">
-    {editingCategory
-      ? 'Atualize os dados da categoria selecionada.'
-      : 'Preencha os campos para cadastrar uma nova categoria.'}
-  </DialogDescription>
-</DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-white">
+              {editingCategory ? 'Editar Categoria' : 'Nova Categoria'}
+            </DialogTitle>
+            <DialogDescription className="text-white/70">
+              {editingCategory
+                ? 'Atualize os dados da categoria selecionada.'
+                : 'Preencha os campos para cadastrar uma nova categoria.'}
+            </DialogDescription>
+          </DialogHeader>
 
           <div className="space-y-4">
             <div>

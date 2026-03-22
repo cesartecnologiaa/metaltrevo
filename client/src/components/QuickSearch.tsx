@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Search, Package, AlertTriangle } from 'lucide-react';
 import { Product } from '@/types';
@@ -65,15 +65,12 @@ export default function QuickSearch({ open, onClose, onSelectProduct }: QuickSea
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl backdrop-blur-2xl bg-gradient-to-br from-purple-900/95 to-pink-900/95 border-white/20">
         <DialogHeader>
-  <DialogTitle className="text-2xl font-bold text-white flex items-center gap-2">
-    <Search className="w-6 h-6" />
-    Busca Rápida de Produtos
-  </DialogTitle>
-  <DialogDescription className="text-white/70 text-sm">
-    Pesquise produtos rapidamente e selecione um item para continuar.
-  </DialogDescription>
-  <p className="text-white/70 text-sm">Pressione ESC para fechar</p>
-</DialogHeader>
+          <DialogTitle className="text-2xl font-bold text-white flex items-center gap-2">
+            <Search className="w-6 h-6" />
+            Busca Rápida de Produtos
+          </DialogTitle>
+          <p className="text-white/70 text-sm">Pressione ESC para fechar</p>
+        </DialogHeader>
 
         <div className="space-y-4">
           {/* Input de Busca */}

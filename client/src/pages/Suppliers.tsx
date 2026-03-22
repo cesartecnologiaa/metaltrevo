@@ -3,7 +3,7 @@ import { Plus, Search, Edit, Trash2, Building2, CheckCircle, Phone, Mail, MapPin
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -402,6 +402,11 @@ export default function Suppliers() {
             <DialogTitle className="text-2xl font-bold text-white">
               {editingSupplier ? 'Editar Fornecedor' : 'Novo Fornecedor'}
             </DialogTitle>
+            <DialogDescription className="text-white/70">
+              {editingSupplier
+                ? 'Atualize os dados do fornecedor selecionado.'
+                : 'Preencha os campos para cadastrar um novo fornecedor.'}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">

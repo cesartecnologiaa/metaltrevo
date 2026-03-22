@@ -3,7 +3,7 @@ import { Plus, Search, Edit, Trash2, Users, CheckCircle, Phone, Mail, MapPin } f
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -415,15 +415,15 @@ export default function Clients() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-3xl backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-  <DialogTitle className="text-2xl font-bold text-white">
-    {editingClient ? 'Editar Cliente' : 'Novo Cliente'}
-  </DialogTitle>
-  <DialogDescription className="text-white/70">
-    {editingClient
-      ? 'Atualize os dados do cliente selecionado.'
-      : 'Preencha os campos para cadastrar um novo cliente.'}
-  </DialogDescription>
-</DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-white">
+              {editingClient ? 'Editar Cliente' : 'Novo Cliente'}
+            </DialogTitle>
+            <DialogDescription className="text-white/70">
+              {editingClient
+                ? 'Atualize os dados do cliente selecionado.'
+                : 'Preencha os campos para cadastrar um novo cliente.'}
+            </DialogDescription>
+          </DialogHeader>
 
           <div className="space-y-4">
             {/* Dados Básicos */}

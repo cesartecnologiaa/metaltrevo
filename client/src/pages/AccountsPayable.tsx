@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, DollarSign, Check, Trash2, FileDown, Calendar, AlertCircle, Clock, TrendingUp, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate, formatDateTimeCompact } from '@/lib/firestoreUtils';
@@ -542,11 +542,8 @@ export default function AccountsPayable() {
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogContent className="backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
             <DialogHeader>
-  <DialogTitle className="text-2xl font-bold text-white">Nova Conta a Pagar</DialogTitle>
-  <DialogDescription className="text-white/70">
-    Preencha os dados para cadastrar uma nova conta a pagar.
-  </DialogDescription>
-</DialogHeader>
+              <DialogTitle className="text-2xl font-bold text-white">Nova Conta a Pagar</DialogTitle>
+            </DialogHeader>
 
             <div className="space-y-4">
               <div>
@@ -639,12 +636,9 @@ export default function AccountsPayable() {
         {/* Dialog de Exportar Contas Pagas */}
         <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
           <DialogContent className="backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
-           <DialogHeader>
-  <DialogTitle className="text-2xl font-bold text-white">Exportar Contas do Período</DialogTitle>
-  <DialogDescription className="text-white/70">
-    Defina o período e exporte o relatório das contas a pagar.
-  </DialogDescription>
-</DialogHeader>
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold text-white">Exportar Contas do Período</DialogTitle>
+            </DialogHeader>
 
             <div className="space-y-4">
               <div>

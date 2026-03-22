@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Search, Eye, FileText, Calendar, DollarSign, User, CheckCircle, XCircle, Clock, Trash2, Printer } from 'lucide-react';
 import { toast } from 'sonner';
@@ -405,12 +405,9 @@ export default function QuotationsList() {
         {selectedQuotation && (
           <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
             <DialogContent className="bg-[#1a1a2e] border-white/10 text-white max-w-3xl max-h-[80vh] overflow-y-auto">
-             <DialogHeader>
-  <DialogTitle className="text-2xl">Detalhes do Orçamento #{selectedQuotation.code}</DialogTitle>
-  <DialogDescription className="text-white/70">
-    Visualize os produtos, valores e informações completas deste orçamento.
-  </DialogDescription>
-</DialogHeader>
+              <DialogHeader>
+                <DialogTitle className="text-2xl">Detalhes do Orçamento #{selectedQuotation.code}</DialogTitle>
+              </DialogHeader>
 
               <div className="space-y-4">
                 {/* Informações gerais */}
@@ -501,11 +498,8 @@ export default function QuotationsList() {
           <Dialog open={convertDialogOpen} onOpenChange={setConvertDialogOpen}>
             <DialogContent className="bg-[#1a1a2e] border-white/10 text-white">
               <DialogHeader>
-  <DialogTitle>Converter Orçamento em Venda</DialogTitle>
-  <DialogDescription className="text-white/70">
-    Confirme os dados para transformar este orçamento em uma venda.
-  </DialogDescription>
-</DialogHeader>
+                <DialogTitle>Converter Orçamento em Venda</DialogTitle>
+              </DialogHeader>
 
               <div className="space-y-4">
                 <div className="p-4 bg-white/5 rounded-lg">
@@ -573,11 +567,8 @@ export default function QuotationsList() {
           <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
             <DialogContent className="bg-[#1a1a2e] border-white/10 text-white">
               <DialogHeader>
-  <DialogTitle>Cancelar Orcamento</DialogTitle>
-  <DialogDescription className="text-white/70">
-    Informe o motivo e confirme o cancelamento do orçamento selecionado.
-  </DialogDescription>
-</DialogHeader>
+                <DialogTitle>Cancelar Orcamento</DialogTitle>
+              </DialogHeader>
 
               <div className="space-y-4">
                 <div className="p-4 bg-red-500/10 rounded-lg border border-red-500/20">

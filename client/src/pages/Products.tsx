@@ -3,7 +3,7 @@ import { Plus, Search, Edit, Trash2, Package, AlertTriangle, CheckCircle, FileTe
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -498,15 +498,15 @@ export default function Products() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-  <DialogTitle className="text-2xl font-bold text-white">
-    {editingProduct ? 'Editar Produto' : 'Novo Produto'}
-  </DialogTitle>
-  <DialogDescription className="text-white/70">
-    {editingProduct
-      ? 'Atualize as informações do produto selecionado.'
-      : 'Preencha os campos para cadastrar um novo produto.'}
-  </DialogDescription>
-</DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-white">
+              {editingProduct ? 'Editar Produto' : 'Novo Produto'}
+            </DialogTitle>
+            <DialogDescription className="text-white/70">
+              {editingProduct
+                ? 'Atualize as informações do produto selecionado.'
+                : 'Preencha os campos para cadastrar um novo produto.'}
+            </DialogDescription>
+          </DialogHeader>
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
