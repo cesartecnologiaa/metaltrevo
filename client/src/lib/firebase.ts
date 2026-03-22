@@ -1,6 +1,10 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAnalytics } from "firebase/analytics";
 
@@ -23,25 +27,20 @@ setPersistence(auth, browserLocalPersistence);
 
 // Segunda instância do Auth para criar usuários sem afetar a sessão atual
 // Usada apenas para operações administrativas de criação de usuários
-const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
+const secondaryApp = initializeApp(firebaseConfig, "Secondary");
 export const secondaryAuth = getAuth(secondaryApp);
 
-// Initialize Firestore with offline persistence
-export const db = getFirestore(app);
+// Initialize Firestore with modern local cache
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
+});
 
 // Initialize Firebase Storage
 export const storage = getStorage(app);
 
-// Enable offline persistence for Firestore
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    console.warn('Firestore persistence failed: Multiple tabs open');
-  } else if (err.code === 'unimplemented') {
-    console.warn('Firestore persistence not available in this browser');
-  }
-});
-
 // Initialize Analytics
-export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+export const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
 
 export default app;
