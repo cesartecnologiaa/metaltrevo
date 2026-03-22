@@ -651,14 +651,6 @@ export default function Sales() {
         <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
           <DialogContent className="max-w-md backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
             <DialogHeader>
- HEAD
-  <DialogTitle className="text-2xl font-bold text-white">
-    Cancelar Venda #{selectedSale.saleNumber}
-  </DialogTitle>
-  <DialogDescription className="text-white/70">
-    Confirme o cancelamento da venda e informe os dados necessários.
-  </DialogDescription>
-</DialogHeader>
               <DialogTitle className="text-2xl font-bold text-white">
                 Cancelar Venda #{selectedSale.saleNumber}
               </DialogTitle>
@@ -666,7 +658,6 @@ export default function Sales() {
                 Confirme o cancelamento da venda e informe os dados necessários.
               </DialogDescription>
             </DialogHeader>
- 9fbb941 (Corrige imports e descriptions dos dialogs)
 
             <div className="space-y-4">
               <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
