@@ -405,9 +405,12 @@ export default function QuotationsList() {
         {selectedQuotation && (
           <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
             <DialogContent className="bg-[#1a1a2e] border-white/10 text-white max-w-3xl max-h-[80vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="text-2xl">Detalhes do Orçamento #{selectedQuotation.code}</DialogTitle>
-              </DialogHeader>
+             <DialogHeader>
+  <DialogTitle className="text-2xl">Detalhes do Orçamento #{selectedQuotation.code}</DialogTitle>
+  <DialogDescription className="text-white/70">
+    Visualize os produtos, valores e informações completas deste orçamento.
+  </DialogDescription>
+</DialogHeader>
 
               <div className="space-y-4">
                 {/* Informações gerais */}
@@ -498,8 +501,11 @@ export default function QuotationsList() {
           <Dialog open={convertDialogOpen} onOpenChange={setConvertDialogOpen}>
             <DialogContent className="bg-[#1a1a2e] border-white/10 text-white">
               <DialogHeader>
-                <DialogTitle>Converter Orçamento em Venda</DialogTitle>
-              </DialogHeader>
+  <DialogTitle>Converter Orçamento em Venda</DialogTitle>
+  <DialogDescription className="text-white/70">
+    Confirme os dados para transformar este orçamento em uma venda.
+  </DialogDescription>
+</DialogHeader>
 
               <div className="space-y-4">
                 <div className="p-4 bg-white/5 rounded-lg">
@@ -567,8 +573,11 @@ export default function QuotationsList() {
           <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
             <DialogContent className="bg-[#1a1a2e] border-white/10 text-white">
               <DialogHeader>
-                <DialogTitle>Cancelar Orcamento</DialogTitle>
-              </DialogHeader>
+  <DialogTitle>Cancelar Orcamento</DialogTitle>
+  <DialogDescription className="text-white/70">
+    Informe o motivo e confirme o cancelamento do orçamento selecionado.
+  </DialogDescription>
+</DialogHeader>
 
               <div className="space-y-4">
                 <div className="p-4 bg-red-500/10 rounded-lg border border-red-500/20">

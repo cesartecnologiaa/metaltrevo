@@ -464,11 +464,14 @@ export default function AccountsReceivable() {
         {selectedAccount && (
           <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
             <DialogContent className="max-w-3xl backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20 max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="text-2xl font-bold text-white">
-                  Detalhes da Conta #{selectedAccount.saleNumber}
-                </DialogTitle>
-              </DialogHeader>
+<DialogHeader>
+  <DialogTitle className="text-2xl font-bold text-white">
+    Detalhes da Conta #{selectedAccount.saleNumber}
+  </DialogTitle>
+  <DialogDescription className="text-white/70">
+    Visualize as informações completas da conta a receber selecionada.
+  </DialogDescription>
+</DialogHeader>
 
               <div className="space-y-4">
                 {/* Informações Gerais */}
@@ -580,10 +583,13 @@ export default function AccountsReceivable() {
           <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
             <DialogContent className="backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
               <DialogHeader>
-                <DialogTitle className="text-2xl font-bold text-white">
-                  Registrar Pagamento - Parcela {selectedInstallment.installmentNumber}
-                </DialogTitle>
-              </DialogHeader>
+  <DialogTitle className="text-2xl font-bold text-white">
+    Registrar Pagamento - Parcela {selectedInstallment.installmentNumber}
+  </DialogTitle>
+  <DialogDescription className="text-white/70">
+    Informe os dados do pagamento da parcela selecionada.
+  </DialogDescription>
+</DialogHeader>
 
               <div className="space-y-4">
                 <div className="p-4 rounded-lg bg-white/5 border border-white/10">

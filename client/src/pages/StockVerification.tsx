@@ -276,10 +276,13 @@ export default function StockVerification() {
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogContent className="backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-white">
-                Corrigir Estoque
-              </DialogTitle>
-            </DialogHeader>
+  <DialogTitle className="text-2xl font-bold text-white">
+    Corrigir Estoque
+  </DialogTitle>
+  <DialogDescription className="text-white/70">
+    Informe o novo valor do estoque e registre o motivo da correção.
+  </DialogDescription>
+</DialogHeader>
 
             {selectedProduct && (
               <div className="space-y-4">

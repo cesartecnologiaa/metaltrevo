@@ -542,8 +542,11 @@ export default function AccountsPayable() {
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogContent className="backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-white">Nova Conta a Pagar</DialogTitle>
-            </DialogHeader>
+  <DialogTitle className="text-2xl font-bold text-white">Nova Conta a Pagar</DialogTitle>
+  <DialogDescription className="text-white/70">
+    Preencha os dados para cadastrar uma nova conta a pagar.
+  </DialogDescription>
+</DialogHeader>
 
             <div className="space-y-4">
               <div>
@@ -636,9 +639,12 @@ export default function AccountsPayable() {
         {/* Dialog de Exportar Contas Pagas */}
         <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
           <DialogContent className="backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-white">Exportar Contas do Período</DialogTitle>
-            </DialogHeader>
+           <DialogHeader>
+  <DialogTitle className="text-2xl font-bold text-white">Exportar Contas do Período</DialogTitle>
+  <DialogDescription className="text-white/70">
+    Defina o período e exporte o relatório das contas a pagar.
+  </DialogDescription>
+</DialogHeader>
 
             <div className="space-y-4">
               <div>

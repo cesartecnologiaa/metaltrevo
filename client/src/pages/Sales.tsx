@@ -551,10 +551,13 @@ export default function Sales() {
         <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
           <DialogContent className="max-w-2xl backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20 max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-white">
-                Detalhes da Venda #{selectedSale.saleNumber}
-              </DialogTitle>
-            </DialogHeader>
+  <DialogTitle className="text-2xl font-bold text-white">
+    Detalhes da Venda #{selectedSale.saleNumber}
+  </DialogTitle>
+  <DialogDescription className="text-white/70">
+    Visualize os dados completos da venda selecionada.
+  </DialogDescription>
+</DialogHeader>
 
             <div className="space-y-4">
               {/* Informações Gerais */}
@@ -648,10 +651,13 @@ export default function Sales() {
         <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
           <DialogContent className="max-w-md backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-white">
-                Cancelar Venda #{selectedSale.saleNumber}
-              </DialogTitle>
-            </DialogHeader>
+  <DialogTitle className="text-2xl font-bold text-white">
+    Cancelar Venda #{selectedSale.saleNumber}
+  </DialogTitle>
+  <DialogDescription className="text-white/70">
+    Confirme o cancelamento da venda e informe os dados necessários.
+  </DialogDescription>
+</DialogHeader>>
 
             <div className="space-y-4">
               <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
@@ -697,10 +703,13 @@ export default function Sales() {
         <Dialog open={deliveryStatusDialogOpen} onOpenChange={setDeliveryStatusDialogOpen}>
           <DialogContent className="backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-white">
-                Status de Entrega - #{selectedSale.saleNumber}
-              </DialogTitle>
-            </DialogHeader>
+  <DialogTitle className="text-2xl font-bold text-white">
+    Status de Entrega - #{selectedSale.saleNumber}
+  </DialogTitle>
+  <DialogDescription className="text-white/70">
+    Atualize o andamento da entrega da venda selecionada.
+  </DialogDescription>
+</DialogHeader>
 
             <div className="space-y-4">
               <div className="p-4 rounded-lg bg-white/5 border border-white/10">

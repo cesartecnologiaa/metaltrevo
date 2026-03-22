@@ -498,10 +498,15 @@ export default function Products() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-white">
-              {editingProduct ? 'Editar Produto' : 'Novo Produto'}
-            </DialogTitle>
-          </DialogHeader>
+  <DialogTitle className="text-2xl font-bold text-white">
+    {editingProduct ? 'Editar Produto' : 'Novo Produto'}
+  </DialogTitle>
+  <DialogDescription className="text-white/70">
+    {editingProduct
+      ? 'Atualize as informações do produto selecionado.'
+      : 'Preencha os campos para cadastrar um novo produto.'}
+  </DialogDescription>
+</DialogHeader>
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
