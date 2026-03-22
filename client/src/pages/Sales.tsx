@@ -657,7 +657,7 @@ export default function Sales() {
   <DialogDescription className="text-white/70">
     Confirme o cancelamento da venda e informe os dados necessários.
   </DialogDescription>
-</DialogHeader>>
+</DialogHeader>
 
             <div className="space-y-4">
               <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
