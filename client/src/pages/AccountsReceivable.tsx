@@ -72,6 +72,30 @@ export default function AccountsReceivable() {
       await updateOverdueInstallments();
       const accountsData = await getAllAccountsReceivable();
       setAccounts(accountsData);
+
+      setSelectedAccount((prev) => {
+        if (!prev) return prev;
+        const updated = accountsData.find((acc) => acc.id === prev.id);
+        return updated || prev;
+      });
+
+      setSelectedPayment((prev) => {
+        if (!prev) return prev;
+        const updatedAccount = accountsData.find((acc) => acc.id === prev.accountId);
+        if (!updatedAccount) return prev;
+
+        const updatedInstallment = updatedAccount.installments.find(
+          (inst) => inst.installmentNumber === prev.installment.installmentNumber
+        );
+
+        if (!updatedInstallment) return null;
+
+        return {
+          accountId: updatedAccount.id,
+          account: updatedAccount,
+          installment: updatedInstallment,
+        };
+      });
     } catch (error) {
       console.error('Error loading accounts:', error);
       toast.error('Erro ao carregar contas a receber');
