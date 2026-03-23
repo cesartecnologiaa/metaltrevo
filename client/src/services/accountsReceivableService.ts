@@ -521,3 +521,58 @@ export async function getDueTodayReceivables(): Promise<Array<{ account: Account
 
   return dueToday;
 }
+
+export type TodayReceivablePayment = {
+  accountId: string;
+  saleId?: string;
+  saleNumber?: string;
+  clientId?: string;
+  clientName?: string;
+  installmentNumber: number;
+  originalAmount: number;
+  paidAmount: number;
+  paidAt: any;
+  paidByUserId?: string;
+  paidByUserName?: string;
+};
+
+function isSameDay(dateA: Date, dateB: Date) {
+  return (
+    dateA.getFullYear() === dateB.getFullYear() &&
+    dateA.getMonth() === dateB.getMonth() &&
+    dateA.getDate() === dateB.getDate()
+  );
+}
+
+export async function getTodayReceivablePayments(): Promise<TodayReceivablePayment[]> {
+  const accounts = await getAllAccountsReceivable();
+  const now = new Date();
+
+  const payments: TodayReceivablePayment[] = [];
+
+  accounts.forEach((account) => {
+    (account.installments || []).forEach((inst: any) => {
+      if (inst.status === 'paga' && inst.paidAt) {
+        const paidDate = toDate(inst.paidAt);
+
+        if (isSameDay(paidDate, now)) {
+          payments.push({
+            accountId: account.id,
+            saleId: account.saleId,
+            saleNumber: account.saleNumber,
+            clientId: account.clientId,
+            clientName: account.clientName,
+            installmentNumber: Number(inst.installmentNumber || 0),
+            originalAmount: Number(inst.originalAmount ?? inst.amount ?? 0),
+            paidAmount: Number(inst.paidAmount ?? inst.amount ?? 0),
+            paidAt: inst.paidAt,
+            paidByUserId: inst.paidByUserId,
+            paidByUserName: inst.paidByUserName,
+          });
+        }
+      }
+    });
+  });
+
+  return payments.sort((a, b) => toDate(b.paidAt).getTime() - toDate(a.paidAt).getTime());
+}
