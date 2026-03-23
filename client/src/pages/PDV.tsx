@@ -517,53 +517,78 @@ export default function PDV() {
 
   return (
     <Layout>
-      <div className="space-y-4 pb-28 lg:pb-6">
+      <div className="space-y-4 pb-24">
         {/* Header */}
         <div>
           <h1 className="text-4xl font-bold text-white mb-2">PDV - Ponto de Venda</h1>
           <p className="text-white/70">Realize vendas de forma rápida e eficiente</p>
-          <p className="text-white/40 text-sm mt-2">Atalhos: F2 produto, F3 cliente, F4 dinheiro, F5 finalizar, F6 desconto, F8 limpar, Ctrl+Del remover item</p>
         </div>
 
-        <div className="fixed bottom-4 right-4 z-40 hidden xl:block">
-          <Card className="backdrop-blur-2xl bg-zinc-950/80 border-white/10 shadow-2xl w-[320px]">
-            <div className="p-4 space-y-3">
-              <div>
-                <p className="text-white font-semibold text-sm">Atalhos do PDV</p>
-                <p className="text-white/50 text-xs">Use o teclado para agilizar o atendimento</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {[
-                  ['F2', 'Buscar produto'],
-                  ['F3', 'Buscar cliente'],
-                  ['F4', 'Dinheiro'],
-                  ['F5', 'Finalizar venda'],
-                  ['F6', 'Desconto'],
-                  ['F8', 'Limpar carrinho'],
-                  ['Ctrl + Del', 'Remover item'],
-                  ['Ctrl + + / -', 'Qtd. item'],
-                ].map(([shortcut, label]) => (
-                  <div key={shortcut} className="col-span-2 flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-                    <span className="text-white/70">{label}</span>
-                    <span className="rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 font-semibold text-cyan-200">
-                      {shortcut}
-                    </span>
-                  </div>
-                ))}
-              </div>
+        {/* Barra fixa de atalhos no rodapé */}
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-zinc-950/88 backdrop-blur-xl shadow-[0_-10px_30px_rgba(0,0,0,0.25)]">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-2 px-3 py-3 md:justify-between">
+            <div className="text-sm font-semibold text-white">
+              Atalhos do PDV
             </div>
-          </Card>
-        </div>
 
-        <div className="fixed inset-x-3 bottom-3 z-40 xl:hidden">
-          <Card className="backdrop-blur-2xl bg-zinc-950/85 border-white/10 shadow-2xl">
-            <div className="p-3">
-              <p className="text-white/80 text-[11px] leading-relaxed">
-                <span className="font-semibold text-white">Atalhos:</span> F2 produto • F3 cliente • F4 dinheiro • F5 finalizar • F6 desconto • F8 limpar
-              </p>
+            <div className="flex flex-wrap items-center justify-center gap-2 md:justify-end">
+              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
+                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
+                  F2
+                </kbd>
+                Produto
+              </span>
+
+              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
+                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
+                  F3
+                </kbd>
+                Cliente
+              </span>
+
+              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
+                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
+                  F4
+                </kbd>
+                Dinheiro
+              </span>
+
+              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
+                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
+                  F5
+                </kbd>
+                Finalizar
+              </span>
+
+              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
+                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
+                  F6
+                </kbd>
+                Desconto
+              </span>
+
+              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
+                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
+                  F8
+                </kbd>
+                Limpar
+              </span>
+
+              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
+                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
+                  Ctrl+Del
+                </kbd>
+                Remover
+              </span>
+
+              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
+                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
+                  Ctrl + / -
+                </kbd>
+                Qtd.
+              </span>
             </div>
-          </Card>
+          </div>
         </div>
 
         {/* Alerta de Caixa Fechado */}
