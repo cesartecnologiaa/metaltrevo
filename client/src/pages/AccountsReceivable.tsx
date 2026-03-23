@@ -29,9 +29,17 @@ type SelectedInstallmentState = {
 
 function parseMoneyValue(value: string) {
   if (!value) return 0;
-  const normalized = value.replace(/\./g, '').replace(',', '.');
+  const normalized = value
+    .replace(/\s/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.')
+    .replace(/[^\d.-]/g, '');
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
 }
 
 export default function AccountsReceivable() {
@@ -268,6 +276,26 @@ export default function AccountsReceivable() {
         return sum + overdue;
       }, 0);
   }, [accounts]);
+
+
+  const currentInstallmentAmount = roundMoney(
+    Number(selectedPayment?.installment?.amount || 0)
+  );
+
+  const typedPaymentAmount = roundMoney(parseMoneyValue(paymentAmount));
+
+  const isPartialPayment =
+    typedPaymentAmount > 0 && typedPaymentAmount < currentInstallmentAmount;
+
+  const isOverPayment = typedPaymentAmount > currentInstallmentAmount;
+
+  const remainingAmount = isPartialPayment
+    ? roundMoney(currentInstallmentAmount - typedPaymentAmount)
+    : 0;
+
+  const surplusAmount = isOverPayment
+    ? roundMoney(typedPaymentAmount - currentInstallmentAmount)
+    : 0;
 
   const filteredAccounts = useMemo(() => {
     let filtered = filterAccountsByDate(accounts);
@@ -578,21 +606,25 @@ export default function AccountsReceivable() {
                   </div>
                 </div>
 
-                {parseMoneyValue(paymentAmount) > 0 && parseMoneyValue(paymentAmount) < Number(selectedPayment.installment.amount || 0) && (
-                  <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                    <p className="text-yellow-300 text-sm font-medium">⚠️ Pagamento parcial</p>
-                    <p className="text-yellow-200 text-sm mt-1">
-                      Restante de R$ {formatCurrency(Number(selectedPayment.installment.amount || 0) - parseMoneyValue(paymentAmount))} será lançado na próxima cobrança em aberto.
-                    </p>
-                  </div>
-                )}
+                {typedPaymentAmount > 0 && (
+                  <div className="space-y-2">
+                    {isPartialPayment && (
+                      <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                        <p className="text-yellow-300 text-sm font-medium">⚠️ Pagamento parcial</p>
+                        <p className="text-yellow-200 text-sm mt-1">
+                          Restante de {formatCurrency(remainingAmount)} será lançado na próxima cobrança em aberto.
+                        </p>
+                      </div>
+                    )}
 
-                {parseMoneyValue(paymentAmount) > Number(selectedPayment.installment.amount || 0) && (
-                  <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                    <p className="text-emerald-300 text-sm font-medium">💸 Pagamento com excedente</p>
-                    <p className="text-emerald-200 text-sm mt-1">
-                      Excedente de R$ {formatCurrency(parseMoneyValue(paymentAmount) - Number(selectedPayment.installment.amount || 0))} será abatido na próxima parcela em aberto.
-                    </p>
+                    {isOverPayment && (
+                      <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                        <p className="text-emerald-300 text-sm font-medium">💸 Pagamento com excedente</p>
+                        <p className="text-emerald-200 text-sm mt-1">
+                          Excedente de {formatCurrency(surplusAmount)} será abatido na próxima parcela em aberto.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
