@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { DollarSign, Calendar, AlertCircle, Search } from 'lucide-react';
+import { DollarSign, Calendar, Check, X, AlertCircle, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate as formatDateUtil, formatDateTime as formatDateTimeUtil } from '@/lib/firestoreUtils';
 import { formatCurrency } from '@/lib/formatters';
@@ -12,6 +12,8 @@ import { useAuthContext } from '@/contexts/AuthContext';
 import { AccountReceivable, Installment } from '@/types';
 import {
   getAllAccountsReceivable,
+  markInstallmentAsPaid,
+  markInstallmentAsPending,
   registerInstallmentPayment,
   updateOverdueInstallments,
 } from '@/services/accountsReceivableService';
@@ -22,7 +24,7 @@ import { usePrintReceipt } from '@/hooks/usePrintReceipt';
 type SelectedInstallmentState = {
   accountId: string;
   account: AccountReceivable;
-  installment: Installment & Record<string, any>;
+  installment: Installment;
 };
 
 function parseMoneyValue(value: string) {
@@ -30,7 +32,6 @@ function parseMoneyValue(value: string) {
 
   const cleaned = value.trim();
 
-  // Se tiver vírgula, trata como formato brasileiro: 1.234,56 -> 1234.56
   if (cleaned.includes(',')) {
     const normalized = cleaned
       .replace(/\s/g, '')
@@ -42,7 +43,6 @@ function parseMoneyValue(value: string) {
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
-  // Se não tiver vírgula, assume ponto como decimal normal do input number: 116.40
   const normalized = cleaned
     .replace(/\s/g, '')
     .replace(/[^\d.-]/g, '');
@@ -53,14 +53,6 @@ function parseMoneyValue(value: string) {
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
-}
-
-function getOriginalAmount(installment?: (Installment & Record<string, any>) | null) {
-  return roundMoney(Number(installment?.originalAmount ?? installment?.amount ?? 0));
-}
-
-function getPaidAmount(installment?: (Installment & Record<string, any>) | null) {
-  return roundMoney(Number(installment?.paidAmount ?? installment?.amount ?? 0));
 }
 
 export default function AccountsReceivable() {
@@ -77,7 +69,7 @@ export default function AccountsReceivable() {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [lastPayment, setLastPayment] = useState<{
     account: AccountReceivable;
-    installment: Installment & Record<string, any>;
+    installment: Installment;
     paidAmount: number;
     paymentDate: Date;
   } | null>(null);
@@ -86,7 +78,9 @@ export default function AccountsReceivable() {
   useEffect(() => {
     const url = new URL(window.location.href);
     const client = url.searchParams.get('client');
-    if (client) setSearchTerm(client);
+    if (client) {
+      setSearchTerm(client);
+    }
   }, []);
 
   useEffect(() => {
@@ -102,25 +96,30 @@ export default function AccountsReceivable() {
 
       setSelectedAccount((prev) => {
         if (!prev) return prev;
-        return accountsData.find((acc) => acc.id === prev.id) || prev;
+        const updated = accountsData.find((acc) => acc.id === prev.id);
+        return updated || prev;
       });
 
       setSelectedPayment((prev) => {
         if (!prev) return prev;
         const updatedAccount = accountsData.find((acc) => acc.id === prev.accountId);
         if (!updatedAccount) return prev;
+
         const updatedInstallment = updatedAccount.installments.find(
           (inst) => inst.installmentNumber === prev.installment.installmentNumber
-        ) as any;
-        if (!updatedInstallment) return null;
-        return { accountId: updatedAccount.id, account: updatedAccount, installment: updatedInstallment };
-      });
+        );
 
-      return accountsData;
+        if (!updatedInstallment) return null;
+
+        return {
+          accountId: updatedAccount.id,
+          account: updatedAccount,
+          installment: updatedInstallment,
+        };
+      });
     } catch (error) {
       console.error('Error loading accounts:', error);
       toast.error('Erro ao carregar contas a receber');
-      return [] as AccountReceivable[];
     } finally {
       setLoading(false);
     }
@@ -128,6 +127,7 @@ export default function AccountsReceivable() {
 
   const filterAccountsByDate = (items: AccountReceivable[]) => {
     if (quickFilter === 'all') return items;
+
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     const today = now.getTime();
@@ -137,9 +137,11 @@ export default function AccountsReceivable() {
     return items.filter(account => {
       return account.installments.some(inst => {
         if (inst.status === 'paga' || inst.status === 'cancelada') return false;
+
         const dueDate = inst.dueDate instanceof Timestamp ? inst.dueDate.toDate() : new Date(inst.dueDate as any);
         dueDate.setHours(0, 0, 0, 0);
         const dueTime = dueDate.getTime();
+
         if (quickFilter === 'overdue') return dueTime < today;
         if (quickFilter === 'today') return dueTime === today;
         if (quickFilter === 'next7days') return dueTime >= today && dueTime <= next7days.getTime();
@@ -154,16 +156,15 @@ export default function AccountsReceivable() {
   };
 
   const handleOpenPaymentDialog = (account: AccountReceivable, installment: Installment) => {
-    const currentInstallment = installment as Installment & Record<string, any>;
-    setSelectedPayment({ accountId: account.id, account, installment: currentInstallment });
-    setPaymentAmount(String(getOriginalAmount(currentInstallment).toFixed(2)));
+    setSelectedPayment({ accountId: account.id, account, installment });
+    setPaymentAmount(String(Number(installment.amount || 0).toFixed(2)));
     setPaymentDialogOpen(true);
   };
 
   const handleProcessPayment = async () => {
     if (!userData || !selectedPayment) return;
 
-    const amount = roundMoney(parseMoneyValue(paymentAmount));
+    const amount = parseMoneyValue(paymentAmount);
     if (!amount || amount <= 0) {
       toast.error('Informe um valor válido');
       return;
@@ -171,43 +172,36 @@ export default function AccountsReceivable() {
 
     setProcessing(true);
     try {
-      const originalAmount = getOriginalAmount(selectedPayment.installment);
       const result = await registerInstallmentPayment(
         selectedPayment.accountId,
         selectedPayment.installment.installmentNumber,
         amount,
-        userData.uid,
-        userData.name
+        userData.uid || '',
+        userData.name || 'Usuário'
       );
 
-      if (amount > originalAmount && result.excessApplied) {
+      const installmentAmount = Number(selectedPayment.installment.amount || 0);
+      if (amount > installmentAmount && result.excessApplied) {
         toast.success(`Pagamento registrado. Excedente de ${formatCurrency(result.excessApplied)} abatido nas próximas parcelas.`);
-      } else if (amount < originalAmount && result.remainingGenerated) {
+      } else if (amount < installmentAmount && result.remainingGenerated) {
         toast.success(`Pagamento parcial registrado. Restante de ${formatCurrency(result.remainingGenerated)} lançado na próxima cobrança.`);
       } else {
         toast.success('Pagamento registrado com sucesso');
       }
 
-      const paymentDate = new Date();
-      const refreshedAccounts = await loadAccounts();
-      const refreshedAccount = refreshedAccounts.find(acc => acc.id === selectedPayment.accountId) || selectedPayment.account;
-      const refreshedInstallment = (refreshedAccount.installments.find(
+      await loadAccounts();
+
+      const refreshedAccounts = await getAllAccountsReceivable();
+      const refreshedAccount = refreshedAccounts.find(acc => acc.id === selectedPayment.accountId);
+      const refreshedInstallment = refreshedAccount?.installments.find(
         inst => inst.installmentNumber === selectedPayment.installment.installmentNumber
-      ) as any) || {
-        ...selectedPayment.installment,
-        originalAmount,
-        paidAmount: amount,
-        amount: originalAmount,
-        status: 'paga',
-        paidAt: Timestamp.fromDate(paymentDate),
-        paidByName: userData.name,
-      };
+      );
 
       setLastPayment({
-        account: refreshedAccount,
-        installment: refreshedInstallment,
+        account: refreshedAccount || selectedPayment.account,
+        installment: refreshedInstallment || selectedPayment.installment,
         paidAmount: amount,
-        paymentDate,
+        paymentDate: new Date(),
       });
 
       setPaymentDialogOpen(false);
@@ -220,6 +214,31 @@ export default function AccountsReceivable() {
     } catch (error: any) {
       console.error('Error processing payment:', error);
       toast.error(error?.message || 'Erro ao processar pagamento');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleToggleInstallmentStatus = async (
+    accountId: string,
+    installmentNumber: number,
+    currentStatus: 'pendente' | 'paga' | 'vencida' | 'cancelada'
+  ) => {
+    if (!userData) return;
+
+    setProcessing(true);
+    try {
+      if (currentStatus === 'paga') {
+        await markInstallmentAsPending(accountId, installmentNumber);
+        toast.success('Parcela marcada como pendente');
+      } else {
+        await markInstallmentAsPaid(accountId, installmentNumber, userData.uid || '', userData.name || 'Usuário');
+        toast.success('Parcela marcada como paga');
+      }
+      await loadAccounts();
+    } catch (error: any) {
+      console.error('Error toggling installment status:', error);
+      toast.error(error?.message || 'Erro ao atualizar parcela');
     } finally {
       setProcessing(false);
     }
@@ -277,20 +296,28 @@ export default function AccountsReceivable() {
       }, 0);
   }, [accounts]);
 
-  const currentInstallmentAmount = roundMoney(getOriginalAmount(selectedPayment?.installment));
-  const typedPaymentAmount = roundMoney(parseMoneyValue(paymentAmount));
-  const isPartialPayment = typedPaymentAmount > 0 && typedPaymentAmount < currentInstallmentAmount;
-  const isOverPayment = typedPaymentAmount > currentInstallmentAmount;
-  const remainingAmount = isPartialPayment ? roundMoney(currentInstallmentAmount - typedPaymentAmount) : 0;
-  const surplusAmount = isOverPayment ? roundMoney(typedPaymentAmount - currentInstallmentAmount) : 0;
-  const hasNextOpenInstallment = !!selectedPayment?.account?.installments?.some((inst) =>
-    inst.installmentNumber > selectedPayment.installment.installmentNumber &&
-    inst.status !== 'paga' &&
-    inst.status !== 'cancelada'
+
+  const currentInstallmentAmount = roundMoney(
+    Number(selectedPayment?.installment?.amount || 0)
   );
 
+  const typedPaymentAmount = roundMoney(parseMoneyValue(paymentAmount));
+
+  const isPartialPayment =
+    typedPaymentAmount > 0 && typedPaymentAmount < currentInstallmentAmount;
+
+  const isOverPayment = typedPaymentAmount > currentInstallmentAmount;
+
+  const remainingAmount = isPartialPayment
+    ? roundMoney(currentInstallmentAmount - typedPaymentAmount)
+    : 0;
+
+  const surplusAmount = isOverPayment
+    ? roundMoney(typedPaymentAmount - currentInstallmentAmount)
+    : 0;
+
   const filteredAccounts = useMemo(() => {
-    const filtered = filterAccountsByDate(accounts);
+    let filtered = filterAccountsByDate(accounts);
     if (!searchTerm) return filtered;
     const search = searchTerm.toLowerCase();
     return filtered.filter(account => (
@@ -425,7 +452,7 @@ export default function AccountsReceivable() {
                     <div className="flex gap-2 flex-wrap">
                       {account.installments
                         .filter(inst => inst.status !== 'paga')
-                        .slice(0, 5)
+                        .slice(0, 3)
                         .map(inst => (
                           <span key={inst.installmentNumber} className={`px-2 py-1 rounded text-xs font-medium ${getInstallmentStatusColor(inst.status)}`}>
                             {inst.installmentNumber}ª: R$ {formatCurrency(inst.amount)} - {formatDate(inst.dueDate)}
@@ -467,7 +494,7 @@ export default function AccountsReceivable() {
                     </div>
                     <div>
                       <p className="text-white/70 text-sm">Total</p>
-                      <p className="text-green-400 font-bold">R$ {formatCurrency(selectedAccount.totalAmount)}</p>
+                      <p className="text-green-400 font-bold text-lg">R$ {formatCurrency(selectedAccount.totalAmount)}</p>
                     </div>
                     <div>
                       <p className="text-white/70 text-sm">Status</p>
@@ -485,87 +512,70 @@ export default function AccountsReceivable() {
                 <div>
                   <h3 className="text-white font-bold mb-3">Parcelas</h3>
                   <div className="space-y-2">
-                    {selectedAccount.installments.map((installment) => {
-                      const safeInstallment = installment as Installment & Record<string, any>;
-                      const originalAmount = getOriginalAmount(safeInstallment);
-                      const paidAmount = safeInstallment.status === 'paga' ? getPaidAmount(safeInstallment) : 0;
-                      const extraPaid = safeInstallment.status === 'paga' ? Math.max(roundMoney(paidAmount - originalAmount), 0) : 0;
-                      const partialFromThisPayment = safeInstallment.status === 'paga' ? Math.max(roundMoney(originalAmount - paidAmount), 0) : 0;
-
-                      return (
-                        <div key={installment.installmentNumber} className="p-4 rounded-lg bg-white/5 border border-white/10 flex items-center justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <span className="text-white font-bold">Parcela {installment.installmentNumber}</span>
-                              <span className={`px-2 py-0.5 rounded text-xs font-semibold ${getInstallmentStatusColor(installment.status)}`}>
-                                {installment.status === 'paga' ? 'Paga' : installment.status === 'vencida' ? 'Vencida' : installment.status === 'cancelada' ? 'Cancelada' : 'Pendente'}
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                              <div>
-                                <p className="text-white/70">Valor da parcela</p>
-                                <p className="text-white font-medium">R$ {formatCurrency(originalAmount)}</p>
-                              </div>
-                              <div>
-                                <p className="text-white/70">Vencimento</p>
-                                <p className="text-white font-medium">{formatDate(installment.dueDate)}</p>
-                              </div>
-                              {installment.status === 'paga' && (
-                                <>
-                                  <div>
-                                    <p className="text-white/70">Valor pago</p>
-                                    <p className="text-emerald-300 font-medium">R$ {formatCurrency(paidAmount)}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-white/70">Pago em</p>
-                                    <p className="text-white font-medium">{formatDateTime((safeInstallment as any).paidAt)}</p>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                            {installment.status === 'paga' && (
-                              <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                                {!!extraPaid && (
-                                  <span className="rounded bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 text-emerald-200">
-                                    Excedente abatido: R$ {formatCurrency(extraPaid)}
-                                  </span>
-                                )}
-                                {!!partialFromThisPayment && (
-                                  <span className="rounded bg-yellow-500/10 border border-yellow-500/30 px-2 py-1 text-yellow-200">
-                                    Restante lançado: R$ {formatCurrency(partialFromThisPayment)}
-                                  </span>
-                                )}
-                                {(safeInstallment as any).paidByName && (
-                                  <span className="rounded bg-white/5 border border-white/10 px-2 py-1 text-white/70">
-                                    Pago por: {(safeInstallment as any).paidByName}
-                                  </span>
-                                )}
-                              </div>
-                            )}
+                    {selectedAccount.installments.map((installment) => (
+                      <div key={installment.installmentNumber} className="p-4 rounded-lg bg-white/5 border border-white/10 flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-white font-bold">Parcela {installment.installmentNumber}</span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${getInstallmentStatusColor(installment.status)}`}>
+                              {installment.status === 'paga' ? 'Paga' : installment.status === 'vencida' ? 'Vencida' : installment.status === 'cancelada' ? 'Cancelada' : 'Pendente'}
+                            </span>
                           </div>
-
-                          <div className="flex gap-2">
-                            {installment.status === 'cancelada' ? (
-                              <span className="text-gray-400 text-sm italic">Parcela cancelada</span>
-                            ) : installment.status === 'paga' ? (
-                              <span className="rounded-md bg-green-500/10 border border-green-500/30 px-3 py-2 text-sm text-green-300">
-                                Parcela paga
-                              </span>
-                            ) : (
-                              <Button
-                                onClick={() => handleOpenPaymentDialog(selectedAccount, installment)}
-                                variant="outline"
-                                size="sm"
-                                className="bg-green-500/10 border-green-500/30 text-green-300 hover:bg-green-500/20"
-                                disabled={processing}
-                              >
-                                <DollarSign className="w-4 h-4 mr-1" /> Pagar
-                              </Button>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <p className="text-white/70">Valor da parcela</p>
+                              <p className="text-white font-medium">R$ {formatCurrency((installment as any).originalAmount ?? installment.amount)}</p>
+                            </div>
+                            <div>
+                              <p className="text-white/70">Vencimento</p>
+                              <p className="text-white font-medium">{formatDate(installment.dueDate)}</p>
+                            </div>
+                            {installment.paidAt && (
+                              <>
+                                <div>
+                                  <p className="text-white/70">Valor pago</p>
+                                  <p className="text-emerald-300 font-bold">R$ {formatCurrency((installment as any).paidAmount ?? installment.amount)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-white/70">Pago em</p>
+                                  <p className="text-white font-medium">{formatDateTime(installment.paidAt)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-white/70">Pago por</p>
+                                  <p className="text-white font-medium">{(installment as any).paidByName}</p>
+                                </div>
+                              </>
                             )}
                           </div>
                         </div>
-                      );
-                    })}
+
+                        <div className="flex gap-2">
+                          {installment.status === 'cancelada' ? (
+                            <span className="text-gray-400 text-sm italic">Parcela cancelada</span>
+                          ) : installment.status === 'paga' ? (
+                            <Button
+                              onClick={() => handleToggleInstallmentStatus(selectedAccount.id, installment.installmentNumber, installment.status)}
+                              variant="outline"
+                              size="sm"
+                              className="bg-red-500/10 border-red-500/30 text-red-300 hover:bg-red-500/20"
+                              disabled={processing}
+                            >
+                              <X className="w-4 h-4 mr-1" /> Desfazer
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={() => handleOpenPaymentDialog(selectedAccount, installment)}
+                              variant="outline"
+                              size="sm"
+                              className="bg-green-500/10 border-green-500/30 text-green-300 hover:bg-green-500/20"
+                              disabled={processing}
+                            >
+                              <DollarSign className="w-4 h-4 mr-1" /> Pagar
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -589,7 +599,7 @@ export default function AccountsReceivable() {
                 <div>
                   <label className="text-white mb-2 block font-medium">Valor da parcela</label>
                   <Input
-                    value={String(getOriginalAmount(selectedPayment.installment).toFixed(2))}
+                    value={String(Number(selectedPayment.installment.amount || 0).toFixed(2))}
                     readOnly
                     className="bg-white/5 border-white/10 text-white/70"
                   />
@@ -612,9 +622,9 @@ export default function AccountsReceivable() {
                 <div>
                   <label className="text-white mb-2 block font-medium">Atalhos rápidos</label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    <Button type="button" variant="outline" onClick={() => setPaymentAmount(String(getOriginalAmount(selectedPayment.installment).toFixed(2)))} className="bg-white/5 border-white/20 text-white hover:bg-white/10">Quitar</Button>
-                    <Button type="button" variant="outline" onClick={() => setPaymentAmount(String(Number((getOriginalAmount(selectedPayment.installment) / 2).toFixed(2))))} className="bg-white/5 border-white/20 text-white hover:bg-white/10">50%</Button>
-                    <Button type="button" variant="outline" onClick={() => setPaymentAmount(String(Number((getOriginalAmount(selectedPayment.installment) * 0.25).toFixed(2))))} className="bg-white/5 border-white/20 text-white hover:bg-white/10">25%</Button>
+                    <Button type="button" variant="outline" onClick={() => setPaymentAmount(String(Number(selectedPayment.installment.amount || 0).toFixed(2)))} className="bg-white/5 border-white/20 text-white hover:bg-white/10">Quitar</Button>
+                    <Button type="button" variant="outline" onClick={() => setPaymentAmount(String(Number((Number(selectedPayment.installment.amount || 0) / 2).toFixed(2))))} className="bg-white/5 border-white/20 text-white hover:bg-white/10">50%</Button>
+                    <Button type="button" variant="outline" onClick={() => setPaymentAmount(String(Number((Number(selectedPayment.installment.amount || 0) * 0.25).toFixed(2))))} className="bg-white/5 border-white/20 text-white hover:bg-white/10">25%</Button>
                     <Button type="button" variant="outline" onClick={() => setPaymentAmount('')} className="bg-white/5 border-white/20 text-white hover:bg-white/10">Limpar</Button>
                   </div>
                 </div>
@@ -622,26 +632,20 @@ export default function AccountsReceivable() {
                 {typedPaymentAmount > 0 && (
                   <div className="space-y-2">
                     {isPartialPayment && (
-                      <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
-                        <div className="font-semibold">Pagamento parcial detectado</div>
-                        {hasNextOpenInstallment ? (
-                          <div className="mt-1">
-                            Restante a repassar para a próxima parcela em aberto: <span className="font-bold">{formatCurrency(remainingAmount)}</span>
-                          </div>
-                        ) : (
-                          <div className="mt-1">
-                            Será gerada uma nova cobrança para o próximo mês no valor de <span className="font-bold">{formatCurrency(remainingAmount)}</span>
-                          </div>
-                        )}
+                      <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                        <p className="text-yellow-300 text-sm font-medium">⚠️ Pagamento parcial</p>
+                        <p className="text-yellow-200 text-sm mt-1">
+                          Restante de {formatCurrency(remainingAmount)} será lançado na próxima cobrança em aberto.
+                        </p>
                       </div>
                     )}
 
                     {isOverPayment && (
-                      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-                        <div className="font-semibold">Pagamento com excedente</div>
-                        <div className="mt-1">
-                          Valor excedente que será abatido na próxima parcela em aberto: <span className="font-bold">{formatCurrency(surplusAmount)}</span>
-                        </div>
+                      <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                        <p className="text-emerald-300 text-sm font-medium">💸 Pagamento com excedente</p>
+                        <p className="text-emerald-200 text-sm mt-1">
+                          Excedente de {formatCurrency(surplusAmount)} será abatido na próxima parcela em aberto.
+                        </p>
                       </div>
                     )}
                   </div>

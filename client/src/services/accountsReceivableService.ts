@@ -18,9 +18,7 @@ function normalizeInstallment(inst: Installment): Installment & Record<string, a
   return {
     ...inst,
     amount: Number(inst.amount || 0),
-    originalAmount: Number((inst as any).originalAmount ?? inst.amount ?? 0),
-    paidAmount: (inst as any).paidAmount != null ? Number((inst as any).paidAmount) : undefined,
-  } as any;
+  };
 }
 
 function getNextMonthDate(base: Date) {
@@ -42,6 +40,12 @@ function calcAccountStatus(installments: Installment[]) {
   if (allPaid) return 'paga' as const;
   if (somePaid) return 'parcial' as const;
   return 'pendente' as const;
+}
+
+function removeUndefinedFields<T extends Record<string, any>>(obj: T): T {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined)
+  ) as T;
 }
 
 export async function createAccountReceivable(
@@ -68,17 +72,14 @@ export async function createAccountReceivable(
       12, 0, 0, 0
     );
 
-    const amount = i === safeInstallments
-      ? Number((totalAmount - installmentAmount * (safeInstallments - 1)).toFixed(2))
-      : installmentAmount;
-
     installments.push({
       installmentNumber: i,
       dueDate: Timestamp.fromDate(dueDate),
-      amount,
+      amount: i === safeInstallments
+        ? Number((totalAmount - installmentAmount * (safeInstallments - 1)).toFixed(2))
+        : installmentAmount,
       status: 'pendente',
-      originalAmount: amount,
-    } as any);
+    });
   }
 
   const payload: Omit<AccountReceivable, 'id'> & Record<string, any> = {
@@ -188,24 +189,23 @@ export async function registerInstallmentPayment(
     throw new Error('Parcela não encontrada ou já quitada.');
   }
 
-  const current = installments[currentIndex] as any;
-  const originalInstallmentAmount = Number(current.originalAmount ?? current.amount ?? 0);
+  const current = installments[currentIndex];
+  const installmentAmount = Number(current.amount || 0);
   const received = Number(Number(amountPaid).toFixed(2));
 
   let excessApplied = 0;
   let remainingGenerated = 0;
-  let carry = Number((originalInstallmentAmount - received).toFixed(2));
+  let carry = Number((installmentAmount - received).toFixed(2));
 
   installments[currentIndex] = {
     ...current,
-    originalAmount: originalInstallmentAmount,
+    originalAmount: current.originalAmount ?? installmentAmount,
     paidAmount: received,
-    amount: originalInstallmentAmount,
+    amount: installmentAmount,
     status: 'paga',
     paidAt: now,
-    paidBy: userId,
-    paidByName: userName,
-    updatedAt: now,
+    paidBy: userId || '',
+    paidByName: userName || 'Usuário',
   } as any;
 
   for (let i = currentIndex + 1; i < installments.length; i++) {
@@ -214,12 +214,10 @@ export async function registerInstallmentPayment(
     if (carry === 0) break;
 
     const nextAmount = Number(next.amount || 0);
-    const nextOriginal = Number(next.originalAmount ?? nextAmount);
 
     if (carry > 0) {
       installments[i] = {
         ...next,
-        originalAmount: nextOriginal,
         amount: Number((nextAmount + carry).toFixed(2)),
         previousBalance: Number((Number(next.previousBalance || 0) + carry).toFixed(2)),
         updatedAt: now,
@@ -233,14 +231,13 @@ export async function registerInstallmentPayment(
     if (credit >= nextAmount) {
       installments[i] = {
         ...next,
-        originalAmount: nextOriginal,
+        originalAmount: next.originalAmount ?? nextAmount,
         paidAmount: nextAmount,
-        amount: nextOriginal,
+        amount: nextAmount,
         status: 'paga',
         paidAt: now,
-        paidBy: userId,
-        paidByName: userName,
-        updatedAt: now,
+        paidBy: userId || '',
+        paidByName: userName || 'Usuário',
         advancedSettlement: true,
       } as any;
       excessApplied += nextAmount;
@@ -248,7 +245,6 @@ export async function registerInstallmentPayment(
     } else {
       installments[i] = {
         ...next,
-        originalAmount: nextOriginal,
         amount: Number((nextAmount - credit).toFixed(2)),
         discountFromPrevious: Number((Number(next.discountFromPrevious || 0) + credit).toFixed(2)),
         updatedAt: now,
@@ -261,14 +257,13 @@ export async function registerInstallmentPayment(
 
   if (carry > 0) {
     const lastActive = [...installments].reverse().find(inst => inst.status !== 'cancelada') || current;
-    const nextDueDate = getNextMonthDate(toDate((lastActive as any).dueDate));
+    const nextDueDate = getNextMonthDate(toDate(lastActive.dueDate));
     const nextInstallmentNumber = Math.max(...installments.map(inst => Number(inst.installmentNumber || 0))) + 1;
 
     installments.push({
       installmentNumber: nextInstallmentNumber,
       dueDate: Timestamp.fromDate(nextDueDate),
       amount: Number(carry.toFixed(2)),
-      originalAmount: Number(carry.toFixed(2)),
       status: 'pendente',
       createdAt: now,
       updatedAt: now,
@@ -287,10 +282,12 @@ export async function registerInstallmentPayment(
       .toFixed(2)
   );
 
+  const safeInstallments = installments.map(inst => removeUndefinedFields(inst as any));
+
   await updateDoc(accountRef, {
-    installments,
+    installments: safeInstallments,
     totalOpen,
-    status: calcAccountStatus(installments),
+    status: calcAccountStatus(safeInstallments as any),
     updatedAt: now,
   } as any);
 
@@ -319,7 +316,7 @@ export async function markInstallmentAsPaid(
   const installment = account.installments.find(inst => inst.installmentNumber === installmentNumber);
   if (!installment) throw new Error('Parcela não encontrada');
 
-  await registerInstallmentPayment(accountId, installmentNumber, Number((installment as any).amount || 0), userId, userName);
+  await registerInstallmentPayment(accountId, installmentNumber, Number(installment.amount || 0), userId, userName);
 }
 
 export async function processPartialPayment(
@@ -351,7 +348,6 @@ export async function markInstallmentAsPending(
         installmentNumber: inst.installmentNumber,
         dueDate: inst.dueDate,
         amount: Number(inst.originalAmount ?? inst.amount ?? 0),
-        originalAmount: Number(inst.originalAmount ?? inst.amount ?? 0),
         status: 'pendente' as const,
       };
     }
@@ -478,7 +474,6 @@ export async function cancelAccountReceivable(
             installmentNumber: inst.installmentNumber,
             dueDate: inst.dueDate,
             amount: inst.amount,
-            originalAmount: (inst as any).originalAmount ?? inst.amount,
             status: 'cancelada' as const,
             cancelledAt: Timestamp.now(),
             cancelledBy: userId,
@@ -522,6 +517,7 @@ export async function getDueTodayReceivables(): Promise<Array<{ account: Account
   return dueToday;
 }
 
+
 export type TodayReceivablePayment = {
   accountId: string;
   saleId?: string;
@@ -547,27 +543,25 @@ function isSameDay(dateA: Date, dateB: Date) {
 export async function getTodayReceivablePayments(): Promise<TodayReceivablePayment[]> {
   const accounts = await getAllAccountsReceivable();
   const now = new Date();
-
   const payments: TodayReceivablePayment[] = [];
 
   accounts.forEach((account) => {
     (account.installments || []).forEach((inst: any) => {
       if (inst.status === 'paga' && inst.paidAt) {
         const paidDate = toDate(inst.paidAt);
-
         if (isSameDay(paidDate, now)) {
           payments.push({
             accountId: account.id,
-            saleId: account.saleId,
+            saleId: (account as any).saleId,
             saleNumber: account.saleNumber,
-            clientId: account.clientId,
-            clientName: account.clientName,
+            clientId: (account as any).clientId,
+            clientName: (account as any).clientName,
             installmentNumber: Number(inst.installmentNumber || 0),
             originalAmount: Number(inst.originalAmount ?? inst.amount ?? 0),
             paidAmount: Number(inst.paidAmount ?? inst.amount ?? 0),
             paidAt: inst.paidAt,
-            paidByUserId: inst.paidByUserId,
-            paidByUserName: inst.paidByUserName,
+            paidByUserId: inst.paidBy,
+            paidByUserName: inst.paidByName,
           });
         }
       }
