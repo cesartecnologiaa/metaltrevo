@@ -40,6 +40,15 @@ export default function CashRegister() {
     loadCashRegister();
   }, []);
 
+  const getSaleCashImpact = (sale: any) => {
+    const total = Number(sale?.total || sale?.totalAmount || 0);
+    const boletoEntry = Number(sale?.boletoEntryAmount || 0);
+    if (sale?.paymentMethod === 'boleto') {
+      return Math.max(0, Math.min(boletoEntry, total));
+    }
+    return total;
+  };
+
   const loadCashRegister = async () => {
     try {
       setLoading(true);
@@ -92,7 +101,7 @@ export default function CashRegister() {
 
     try {
       setLoading(true);
-      const totalSales = sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
+      const totalSales = sales.reduce((sum, sale) => sum + getSaleCashImpact(sale), 0);
       const totalWithdrawals = withdrawals.reduce((sum, w) => sum + w.amount, 0);
       const finalBalance = cashRegister.initialBalance + totalSales - totalWithdrawals;
 
@@ -189,7 +198,7 @@ export default function CashRegister() {
     }
   };
 
-  const totalSales = sales.reduce((sum, sale) => sum + (sale.total || 0), 0);
+  const totalSales = sales.reduce((sum, sale) => sum + getSaleCashImpact(sale), 0);
   const totalWithdrawals = withdrawals.reduce((sum, w) => sum + w.amount, 0);
   const currentBalance = cashRegister
     ? cashRegister.initialBalance + totalSales - totalWithdrawals
@@ -202,7 +211,7 @@ export default function CashRegister() {
       acc[method] = { count: 0, total: 0 };
     }
     acc[method].count++;
-    acc[method].total += (sale as any).total || 0;
+    acc[method].total += getSaleCashImpact(sale);
     return acc;
   }, {} as Record<string, { count: number; total: number }>);
 

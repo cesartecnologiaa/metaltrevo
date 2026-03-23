@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   Search, 
   ShoppingCart, 
@@ -74,6 +75,8 @@ export default function PDV() {
   const [deliveryFee, setDeliveryFee] = useState('');
   const [discount, setDiscount] = useState('');
   const [installmentCount, setInstallmentCount] = useState(1);
+  const [boletoEntryAmount, setBoletoEntryAmount] = useState('');
+  const [boletoEntryDialogOpen, setBoletoEntryDialogOpen] = useState(false);
 
   // Verificar se caixa está aberto
   useEffect(() => {
@@ -368,6 +371,8 @@ export default function PDV() {
       setDeliveryFee('');
       setDiscount('');
     setInstallmentCount(1);
+    setBoletoEntryAmount('');
+    setBoletoEntryDialogOpen(false);
     toast.info('Carrinho limpo');
   };
 
@@ -379,6 +384,13 @@ export default function PDV() {
     const fee = parseFloat(deliveryFee as string) || 0;
     const disc = parseFloat(discount as string) || 0;
     return Math.max(0, calculateSubtotal() + fee - disc);
+  };
+
+  const getBoletoEntryValue = () => {
+    const parsed = Number(String(boletoEntryAmount || '0').replace(',', '.'));
+    const total = calculateTotal();
+    if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+    return Math.min(parsed, total);
   };
 
   const finalizeSale = async () => {
@@ -399,6 +411,16 @@ export default function PDV() {
 
     if (!selectedClient) {
       toast.error('Selecione um cliente!');
+      return;
+    }
+
+    const boletoEntryValue = paymentMethod === 'boleto' ? getBoletoEntryValue() : 0;
+    if (paymentMethod === 'boleto' && boletoEntryValue < 0) {
+      toast.error('Valor de entrada inválido.');
+      return;
+    }
+    if (paymentMethod === 'boleto' && boletoEntryValue > calculateTotal()) {
+      toast.error('A entrada não pode ser maior que o total da venda.');
       return;
     }
 
@@ -426,6 +448,7 @@ export default function PDV() {
         deliveryType,
         total: calculateTotal(),
         paymentMethod,
+        boletoEntryAmount: boletoEntryValue,
         status: 'concluida',
         sellerId: userData.uid,
         sellerName: userData.name || 'Vendedor',
@@ -478,18 +501,24 @@ export default function PDV() {
       // Salvar venda no Firebase
       const saleId = await createSale(saleData);
       
-      // Boleto sempre gera conta a receber; crédito só quando parcelado
+      // Boleto gera conta a receber apenas do saldo restante; crédito só quando parcelado
       if (paymentMethod === 'boleto' || (paymentMethod === 'cartao_credito' && installmentCount > 1)) {
         const { createAccountReceivable } = await import('@/services/accountsReceivableService');
-        await createAccountReceivable(
-          saleId,
-          saleNumber,
-          selectedClient.id,
-          selectedClient.name,
-          selectedClient.cpfCnpj,
-          calculateTotal(),
-          paymentMethod === 'boleto' ? Math.max(1, installmentCount) : installmentCount
-        );
+        const receivableTotal = paymentMethod === 'boleto'
+          ? Math.max(0, calculateTotal() - boletoEntryValue)
+          : calculateTotal();
+
+        if (receivableTotal > 0) {
+          await createAccountReceivable(
+            saleId,
+            saleNumber,
+            selectedClient.id,
+            selectedClient.name,
+            selectedClient.cpfCnpj,
+            receivableTotal,
+            paymentMethod === 'boleto' ? Math.max(1, installmentCount) : installmentCount
+          );
+        }
       }
       
       toast.success('Venda finalizada com sucesso!');
@@ -532,7 +561,7 @@ export default function PDV() {
       <Layout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
-            <Loader2 className="w-12 h-12 animate-spin text-white/80 mx-auto mb-4" />
+            <Loader2 className="w-12 h-12 animate-spin text-blue-500 mx-auto mb-4" />
             <p className="text-white/70">Carregando produtos...</p>
           </div>
         </div>
@@ -542,31 +571,39 @@ export default function PDV() {
 
   return (
     <Layout>
-      <div className="space-y-4 pb-10">
+      <div className="space-y-4 pb-24">
         {/* Header */}
         <div>
           <h1 className="text-4xl font-bold text-white mb-2">PDV - Ponto de Venda</h1>
           <p className="text-white/70">Realize vendas de forma rápida e eficiente</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {[
-            ['F2', 'Produto'],
-            ['F3', 'Cliente'],
-            ['F4', 'Dinheiro'],
-            ['F5', 'Finalizar'],
-            ['F6', 'Desconto'],
-            ['F8', 'Limpar'],
-            ['Ctrl+Del', 'Remover'],
-            ['Ctrl + / -', 'Qtd.'],
-          ].map(([shortcut, label]) => (
-            <span key={shortcut} className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-white/75">
-              <kbd className="rounded-md border border-white/10 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
-                {shortcut}
-              </kbd>
-              {label}
-            </span>
-          ))}
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-zinc-950/88 backdrop-blur-xl shadow-[0_-10px_30px_rgba(0,0,0,0.25)]">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-2 px-3 py-3 md:justify-between">
+            <div className="text-sm font-semibold text-white">
+              Atalhos do PDV
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-2 md:justify-end">
+              {[
+                ['F2', 'Produto'],
+                ['F3', 'Cliente'],
+                ['F4', 'Dinheiro'],
+                ['F5', 'Finalizar'],
+                ['F6', 'Desconto'],
+                ['F8', 'Limpar'],
+                ['Ctrl+Del', 'Remover'],
+                ['Ctrl + / -', 'Qtd.'],
+              ].map(([shortcut, label]) => (
+                <span key={shortcut} className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
+                  <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
+                    {shortcut}
+                  </kbd>
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Alerta de Caixa Fechado */}
@@ -700,7 +737,7 @@ export default function PDV() {
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
                 onKeyDown={handleSearchProduct}
-                className="pl-12 h-14 text-lg bg-white/5 border-white/20 text-white placeholder:text-white/50"
+                className="pl-12 h-14 text-lg bg-white/10 border-white/20 text-white placeholder:text-white/50"
               />
             </div>
             {/* Lista de produtos filtrados */}
@@ -710,7 +747,7 @@ export default function PDV() {
                   <button
                     key={product.id}
                     onClick={() => selectProduct(product)}
-                    className="w-full p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-left transition-colors"
+                    className="w-full p-3 bg-white/10 hover:bg-white/20 rounded-lg text-left transition-colors"
                   >
                     <div className="flex justify-between items-start">
                       <div>
@@ -718,9 +755,8 @@ export default function PDV() {
                         <p className="text-white/60 text-sm">Código: {product.code}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-emerald-300 font-bold text-sm">À vista: R$ {formatCurrency(product.cashPrice || product.price)}</p>
-                        <p className="text-cyan-300 font-bold text-sm mt-1">A prazo: R$ {formatCurrency(product.creditPrice || product.price)}</p>
-                        <p className="text-white/60 text-sm mt-1">Estoque: {product.currentStock}</p>
+                        <p className="text-white font-bold">R$ {formatCurrency(getProductPrice(product))}</p>
+                        <p className="text-white/60 text-sm">Estoque: {product.currentStock}</p>
                       </div>
                     </div>
                   </button>
@@ -989,7 +1025,7 @@ export default function PDV() {
                     <Button
                       type="button"
                       variant={paymentMethod === 'boleto' ? 'default' : 'outline'}
-                      onClick={() => setPaymentMethod('boleto')}
+                      onClick={() => { setPaymentMethod('boleto'); setBoletoEntryDialogOpen(true); }}
                       className={`h-16 flex flex-col items-center justify-center gap-2 col-span-2 ${
                         paymentMethod === 'boleto'
                           ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white border-none'
@@ -1021,6 +1057,29 @@ export default function PDV() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+
+                {paymentMethod === 'boleto' && (
+                  <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-white/80">
+                    <div className="flex items-center justify-between">
+                      <span>Entrada no ato</span>
+                      <button
+                        type="button"
+                        onClick={() => setBoletoEntryDialogOpen(true)}
+                        className="text-cyan-300 hover:text-cyan-200 font-medium"
+                      >
+                        {getBoletoEntryValue() > 0 ? 'Editar entrada' : 'Informar entrada'}
+                      </button>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-white/60">Entrada</span>
+                      <span className="font-semibold">R$ {formatCurrency(getBoletoEntryValue())}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-white/60">Saldo a cobrar</span>
+                      <span className="font-semibold text-yellow-300">R$ {formatCurrency(Math.max(0, calculateTotal() - getBoletoEntryValue()))}</span>
+                    </div>
                   </div>
                 )}
 
@@ -1086,6 +1145,53 @@ export default function PDV() {
             </Card>
           </div>
         )}
+
+        <Dialog open={boletoEntryDialogOpen} onOpenChange={setBoletoEntryDialogOpen}>
+          <DialogContent className="sm:max-w-md bg-zinc-900 border-white/10 text-white">
+            <DialogHeader>
+              <DialogTitle>Entrada no boleto</DialogTitle>
+              <DialogDescription className="text-white/60">
+                Informe um valor de entrada, se houver. O restante seguirá para contas a receber.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-white/60">Total da venda</span>
+                  <span className="font-semibold">R$ {formatCurrency(calculateTotal())}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-white/60">Saldo a cobrar</span>
+                  <span className="font-semibold text-yellow-300">R$ {formatCurrency(Math.max(0, calculateTotal() - getBoletoEntryValue()))}</span>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-white mb-2 block">Valor de entrada (opcional)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={calculateTotal()}
+                  value={boletoEntryAmount}
+                  onChange={(e) => setBoletoEntryAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { setBoletoEntryAmount(''); setBoletoEntryDialogOpen(false); }} className="border-white/20 text-white hover:bg-white/10">
+                Sem entrada
+              </Button>
+              <Button type="button" onClick={() => setBoletoEntryDialogOpen(false)} className="bg-cyan-600 hover:bg-cyan-700">
+                Confirmar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Comprovante (oculto, apenas para impressão) */}
         {lastSale && (
