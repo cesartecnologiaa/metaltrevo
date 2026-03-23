@@ -27,11 +27,26 @@ type SelectedInstallmentState = {
 
 function parseMoneyValue(value: string) {
   if (!value) return 0;
-  const normalized = value
+
+  const cleaned = value.trim();
+
+  // Se tiver vírgula, trata como formato brasileiro: 1.234,56 -> 1234.56
+  if (cleaned.includes(',')) {
+    const normalized = cleaned
+      .replace(/\s/g, '')
+      .replace(/\./g, '')
+      .replace(',', '.')
+      .replace(/[^\d.-]/g, '');
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  // Se não tiver vírgula, assume ponto como decimal normal do input number: 116.40
+  const normalized = cleaned
     .replace(/\s/g, '')
-    .replace(/\./g, '')
-    .replace(',', '.')
     .replace(/[^\d.-]/g, '');
+
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
 }
