@@ -9,20 +9,20 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Client } from '@/types';
-import { 
-  getAllClients, 
-  createClient, 
-  updateClient, 
+import {
+  getAllClients,
+  createClient,
+  updateClient,
   deactivateClient,
   reactivateClient,
   getClientByCpfCnpj,
   deleteClient
 } from '@/services/clientService';
-import { 
-  validateCpfCnpj, 
-  formatCpfCnpj, 
-  formatCEP, 
-  formatPhone 
+import {
+  validateCpfCnpj,
+  formatCpfCnpj,
+  formatCEP,
+  formatPhone
 } from '@/lib/validators';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuthContext } from '@/contexts/AuthContext';
@@ -30,9 +30,12 @@ import { formatCurrency } from '@/lib/formatters';
 import { formatDate as formatFirestoreDate } from '@/lib/firestoreUtils';
 import { getClientPendingBalance, getClientPendingInstallments, markInstallmentAsPaid } from '@/services/accountsReceivableService';
 
+type PendingBalance = { total: number; overdue: number };
+
 export default function Clients() {
   const permissions = usePermissions();
   const { userData } = useAuthContext();
+
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,7 +45,8 @@ export default function Clients() {
   const [saving, setSaving] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
-  const [pendingBalances, setPendingBalances] = useState<Record<string, { total: number; overdue: number }>>({});
+
+  const [pendingBalances, setPendingBalances] = useState<Record<string, PendingBalance>>({});
   const [pendingDialogOpen, setPendingDialogOpen] = useState(false);
   const [selectedPendingClient, setSelectedPendingClient] = useState<Client | null>(null);
   const [pendingInstallments, setPendingInstallments] = useState<Array<{
@@ -55,7 +59,6 @@ export default function Clients() {
   const [loadingPendingInstallments, setLoadingPendingInstallments] = useState(false);
   const [processingPaymentId, setProcessingPaymentId] = useState<string | null>(null);
 
-  // Form state
   const [formData, setFormData] = useState({
     name: '',
     cpfCnpj: '',
@@ -162,7 +165,6 @@ export default function Clients() {
 
     setSaving(true);
     try {
-      // Verificar se CPF/CNPJ já existe (apenas para novo cadastro)
       if (!editingClient) {
         const existingClient = await getClientByCpfCnpj(formData.cpfCnpj);
         if (existingClient) {
@@ -172,24 +174,20 @@ export default function Clients() {
         }
       }
 
-      // Preparar dados do cliente, removendo campos undefined
       const clientData: any = {
         name: formData.name.trim(),
         cpfCnpj: formData.cpfCnpj.replace(/[^\d]/g, ''),
         active: true,
       };
 
-      // Adicionar email apenas se preenchido
       if (formData.email.trim()) {
         clientData.email = formData.email.trim();
       }
 
-      // Adicionar telefone apenas se preenchido
       if (formData.phone.replace(/[^\d]/g, '')) {
         clientData.phone = formData.phone.replace(/[^\d]/g, '');
       }
 
-      // Adicionar endereço apenas se rua estiver preenchida
       if (formData.street.trim()) {
         clientData.address = {
           street: formData.street.trim(),
@@ -199,7 +197,7 @@ export default function Clients() {
           state: formData.state.trim(),
           zipCode: formData.zipCode.replace(/[^\d]/g, ''),
         };
-        // Adicionar complemento apenas se preenchido
+
         if (formData.complement.trim()) {
           clientData.address.complement = formData.complement.trim();
         }
@@ -246,7 +244,7 @@ export default function Clients() {
 
   const handleDeleteConfirm = async () => {
     if (!clientToDelete) return;
-    
+
     try {
       await deleteClient(clientToDelete.id);
       toast.success('Cliente excluído permanentemente');
@@ -259,47 +257,89 @@ export default function Clients() {
     }
   };
 
-  // Filtros
-  const filteredClients = clients.filter(client => {
-    const matchesSearch = 
-      client?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client?.cpfCnpj?.includes(searchTerm.replace(/[^\d]/g, '')) ||
-      (client?.email && client.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (client?.phone && client.phone.includes(searchTerm.replace(/[^\d]/g, '')));
-    
-    const matchesStatus = filterStatus === 'all' || 
-      (filterStatus === 'active' && client.active) ||
-      (filterStatus === 'inactive' && !client.active);
+  const filteredClients = useMemo(() => {
+    return clients.filter(client => {
+      const matchesSearch =
+        client?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        client?.cpfCnpj?.includes(searchTerm.replace(/[^\d]/g, '')) ||
+        (client?.email && client.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (client?.phone && client.phone.includes(searchTerm.replace(/[^\d]/g, '')));
 
-    return matchesSearch && matchesStatus;
-  });
+      const matchesStatus =
+        filterStatus === 'all' ||
+        (filterStatus === 'active' && client.active) ||
+        (filterStatus === 'inactive' && !client.active);
 
-  const visibleClients = useMemo(() => filteredClients.slice(0, searchTerm.trim() ? 20 : 12), [filteredClients, searchTerm]);
+      return matchesSearch && matchesStatus;
+    });
+  }, [clients, searchTerm, filterStatus]);
+
+  const visibleClients = useMemo(() => {
+    return filteredClients.slice(0, searchTerm.trim() ? 20 : 12);
+  }, [filteredClients, searchTerm]);
+
+  const visibleClientIdsKey = useMemo(() => {
+    return visibleClients.map(client => client.id).join('|');
+  }, [visibleClients]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadPendingBalances = async () => {
       if (visibleClients.length === 0) {
-        if (!cancelled) setPendingBalances({});
+        if (!cancelled) {
+          setPendingBalances(prev => (Object.keys(prev).length ? {} : prev));
+        }
         return;
       }
 
       try {
         const results = await Promise.all(
-          visibleClients.map(async (client) => ({
-            clientId: client.id,
-            balance: await getClientPendingBalance(client.id),
-          }))
+          visibleClients.map(async (client) => {
+            const balance = await getClientPendingBalance(client.id);
+            return {
+              clientId: client.id,
+              balance: {
+                total: Number(balance?.total || 0),
+                overdue: Number(balance?.overdue || 0),
+              },
+            };
+          })
         );
 
         if (cancelled) return;
 
-        const nextBalances: Record<string, { total: number; overdue: number }> = {};
+        const nextBalances: Record<string, PendingBalance> = {};
         results.forEach(({ clientId, balance }) => {
           nextBalances[clientId] = balance;
         });
-        setPendingBalances(nextBalances);
+
+        setPendingBalances(prev => {
+          const prevKeys = Object.keys(prev);
+          const nextKeys = Object.keys(nextBalances);
+
+          if (prevKeys.length === nextKeys.length) {
+            let changed = false;
+
+            for (const key of nextKeys) {
+              const prevValue = prev[key];
+              const nextValue = nextBalances[key];
+
+              if (
+                !prevValue ||
+                prevValue.total !== nextValue.total ||
+                prevValue.overdue !== nextValue.overdue
+              ) {
+                changed = true;
+                break;
+              }
+            }
+
+            if (!changed) return prev;
+          }
+
+          return nextBalances;
+        });
       } catch (error) {
         console.error('Error loading pending balances:', error);
       }
@@ -310,12 +350,13 @@ export default function Clients() {
     return () => {
       cancelled = true;
     };
-  }, [visibleClients]);
+  }, [visibleClientIdsKey]);
 
   const openPendingDialog = async (client: Client) => {
     setSelectedPendingClient(client);
     setPendingDialogOpen(true);
     setLoadingPendingInstallments(true);
+
     try {
       const data = await getClientPendingInstallments(client.id);
       setPendingInstallments(data);
@@ -335,6 +376,7 @@ export default function Clients() {
 
     const paymentKey = `${accountId}-${installmentNumber}`;
     setProcessingPaymentId(paymentKey);
+
     try {
       await markInstallmentAsPaid(accountId, installmentNumber, userData.uid, userData.name);
       toast.success('Parcela marcada como paga');
@@ -344,8 +386,15 @@ export default function Clients() {
           getClientPendingInstallments(selectedPendingClient.id),
           getClientPendingBalance(selectedPendingClient.id),
         ]);
+
         setPendingInstallments(updatedPending);
-        setPendingBalances(prev => ({ ...prev, [selectedPendingClient.id]: updatedBalance }));
+        setPendingBalances(prev => ({
+          ...prev,
+          [selectedPendingClient.id]: {
+            total: Number(updatedBalance?.total || 0),
+            overdue: Number(updatedBalance?.overdue || 0),
+          },
+        }));
       }
     } catch (error) {
       console.error('Error marking installment as paid:', error);
@@ -357,7 +406,6 @@ export default function Clients() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Gestão de Clientes</h1>
@@ -372,7 +420,6 @@ export default function Clients() {
         </Button>
       </div>
 
-      {/* Filtros */}
       <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2">
@@ -405,7 +452,6 @@ export default function Clients() {
         </div>
       </Card>
 
-      {/* Lista de Clientes */}
       {loading ? (
         <div className="text-center py-12 text-white/70">
           Carregando clientes...
@@ -419,134 +465,144 @@ export default function Clients() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {visibleClients.map((client) => {
-            const pendingInfo = pendingBalances[client.id];
-            const hasPending = (pendingInfo?.total || 0) > 0;
+            const pendingInfo = pendingBalances[client.id] || { total: 0, overdue: 0 };
+            const hasPending = pendingInfo.total > 0;
+
             return (
-            <Card
-              key={client.id}
-              className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-5 hover:border-white/40 transition-all"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <h3 className="text-white font-bold text-lg">{client.name}</h3>
-                  <p className="text-white/50 text-sm">
-                    {formatCpfCnpj(client.cpfCnpj)}
-                  </p>
-                </div>
-                {!client.active && (
-                  <span className="px-2 py-1 rounded-md bg-red-500/20 text-red-300 text-xs">
-                    Inativo
-                  </span>
-                )}
-              </div>
-
-              {searchTerm.trim() && hasPending && (
-                <div className={`mb-3 rounded-lg border px-3 py-2 text-sm ${
-                  pendingInfo.overdue > 0
-                    ? 'border-red-500/30 bg-red-500/10 text-red-200'
-                    : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-200'
-                }`}>
-                  <div className="flex items-center gap-2 font-semibold">
-                    {pendingInfo.overdue > 0 ? <AlertTriangle className="w-4 h-4" /> : <DollarSign className="w-4 h-4" />}
-                    {pendingInfo.overdue > 0 ? 'Pagamentos pendentes vencidos' : 'Pagamentos pendentes'}
+              <Card
+                key={client.id}
+                className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-5 hover:border-white/40 transition-all"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <h3 className="text-white font-bold text-lg">{client.name}</h3>
+                    <p className="text-white/50 text-sm">
+                      {formatCpfCnpj(client.cpfCnpj)}
+                    </p>
                   </div>
-                  <div className="mt-1">
-                    Total em aberto: <span className="font-bold">R$ {formatCurrency(pendingInfo.total)}</span>
-                    {pendingInfo.overdue > 0 && (
-                      <span className="ml-2 text-red-300">Vencido: R$ {formatCurrency(pendingInfo.overdue)}</span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-2 mb-4">
-                {client.email && (
-                  <div className="flex items-center gap-2 text-white/70 text-sm">
-                    <Mail className="w-4 h-4" />
-                    <span className="truncate">{client.email}</span>
-                  </div>
-                )}
-                {client.phone && (
-                  <div className="flex items-center gap-2 text-white/70 text-sm">
-                    <Phone className="w-4 h-4" />
-                    <span>{formatPhone(client.phone)}</span>
-                  </div>
-                )}
-                {client.address && (
-                  <div className="flex items-start gap-2 text-white/70 text-sm">
-                    <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <span className="line-clamp-2">
-                      {client.address.city}, {client.address.state}
+                  {!client.active && (
+                    <span className="px-2 py-1 rounded-md bg-red-500/20 text-red-300 text-xs">
+                      Inativo
                     </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Ações */}
-              <div className="space-y-2">
-                {hasPending && (
-                  <Button
-                    onClick={() => openPendingDialog(client)}
-                    variant="outline"
-                    size="sm"
-                    className="w-full border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
-                  >
-                    <DollarSign className="w-4 h-4 mr-2" />
-                    Ver pendências / Dar baixa
-                  </Button>
-                )}
-
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => handleOpenDialog(client)}
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 bg-white/5 border-white/20 text-white hover:bg-white/10"
-                  >
-                    <Edit className="w-4 h-4 mr-1" />
-                    Editar
-                  </Button>
-                  <Button
-                    onClick={() => handleToggleStatus(client)}
-                    variant="outline"
-                    size="sm"
-                    className={`flex-1 ${
-                      client.active 
-                        ? 'bg-red-500/10 border-red-500/30 text-red-300 hover:bg-red-500/20'
-                        : 'bg-green-500/10 border-green-500/30 text-green-300 hover:bg-green-500/20'
-                    }`}
-                  >
-                    {client.active ? (
-                      <>
-                        <Trash2 className="w-4 h-4 mr-1" />
-                        Desativar
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-1" />
-                        Reativar
-                      </>
-                    )}
-                  </Button>
-                  {permissions.isAdmin && (
-                    <Button
-                      onClick={() => handleDeleteClick(client)}
-                      variant="outline"
-                      size="sm"
-                      className="bg-red-600/10 border-red-600/30 text-red-400 hover:bg-red-600/20"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
                   )}
                 </div>
-              </div>
-            </Card>
-          );
+
+                {searchTerm.trim() && hasPending && (
+                  <div
+                    className={`mb-3 rounded-lg border px-3 py-2 text-sm ${
+                      pendingInfo.overdue > 0
+                        ? 'border-red-500/30 bg-red-500/10 text-red-200'
+                        : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 font-semibold">
+                      {pendingInfo.overdue > 0 ? (
+                        <AlertTriangle className="w-4 h-4" />
+                      ) : (
+                        <DollarSign className="w-4 h-4" />
+                      )}
+                      {pendingInfo.overdue > 0 ? 'Pagamentos pendentes vencidos' : 'Pagamentos pendentes'}
+                    </div>
+                    <div className="mt-1">
+                      Total em aberto:{' '}
+                      <span className="font-bold">{formatCurrency(pendingInfo.total)}</span>
+                      {pendingInfo.overdue > 0 && (
+                        <span className="ml-2 text-red-300">
+                          Vencido: {formatCurrency(pendingInfo.overdue)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2 mb-4">
+                  {client.email && (
+                    <div className="flex items-center gap-2 text-white/70 text-sm">
+                      <Mail className="w-4 h-4" />
+                      <span className="truncate">{client.email}</span>
+                    </div>
+                  )}
+                  {client.phone && (
+                    <div className="flex items-center gap-2 text-white/70 text-sm">
+                      <Phone className="w-4 h-4" />
+                      <span>{formatPhone(client.phone)}</span>
+                    </div>
+                  )}
+                  {client.address && (
+                    <div className="flex items-start gap-2 text-white/70 text-sm">
+                      <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <span className="line-clamp-2">
+                        {client.address.city}, {client.address.state}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {hasPending && (
+                    <Button
+                      onClick={() => openPendingDialog(client)}
+                      variant="outline"
+                      size="sm"
+                      className="w-full border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
+                    >
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Ver pendências / Dar baixa
+                    </Button>
+                  )}
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleOpenDialog(client)}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 bg-white/5 border-white/20 text-white hover:bg-white/10"
+                    >
+                      <Edit className="w-4 h-4 mr-1" />
+                      Editar
+                    </Button>
+
+                    <Button
+                      onClick={() => handleToggleStatus(client)}
+                      variant="outline"
+                      size="sm"
+                      className={`flex-1 ${
+                        client.active
+                          ? 'bg-red-500/10 border-red-500/30 text-red-300 hover:bg-red-500/20'
+                          : 'bg-green-500/10 border-green-500/30 text-green-300 hover:bg-green-500/20'
+                      }`}
+                    >
+                      {client.active ? (
+                        <>
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          Desativar
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-1" />
+                          Reativar
+                        </>
+                      )}
+                    </Button>
+
+                    {permissions.isAdmin && (
+                      <Button
+                        onClick={() => handleDeleteClick(client)}
+                        variant="outline"
+                        size="sm"
+                        className="bg-red-600/10 border-red-600/30 text-red-400 hover:bg-red-600/20"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            );
           })}
         </div>
       )}
 
-      {/* Dialog de Pendências do Cliente */}
       <Dialog open={pendingDialogOpen} onOpenChange={setPendingDialogOpen}>
         <DialogContent className="max-w-3xl backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20 max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -567,6 +623,7 @@ export default function Clients() {
               {pendingInstallments.map((item) => {
                 const paymentKey = `${item.accountId}-${item.installment.installmentNumber}`;
                 const isProcessing = processingPaymentId === paymentKey;
+
                 return (
                   <div key={paymentKey} className="rounded-lg border border-white/10 bg-white/5 p-4">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -579,13 +636,15 @@ export default function Clients() {
                         </p>
                         <div className="flex flex-wrap items-center gap-2 text-sm">
                           <span className="text-emerald-300 font-bold">
-                            R$ {formatCurrency(item.installment.amount)}
+                            {formatCurrency(item.installment.amount)}
                           </span>
-                          <span className={`rounded px-2 py-0.5 text-xs font-semibold ${
-                            item.installment.status === 'vencida'
-                              ? 'bg-red-500/20 text-red-300'
-                              : 'bg-yellow-500/20 text-yellow-300'
-                          }`}>
+                          <span
+                            className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                              item.installment.status === 'vencida'
+                                ? 'bg-red-500/20 text-red-300'
+                                : 'bg-yellow-500/20 text-yellow-300'
+                            }`}
+                          >
                             {item.installment.status === 'vencida' ? 'Vencida' : 'Pendente'}
                           </span>
                         </div>
@@ -606,7 +665,7 @@ export default function Clients() {
           )}
         </DialogContent>
       </Dialog>
-      {/* Dialog de Cadastro/Edição */}
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-3xl backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -621,7 +680,6 @@ export default function Clients() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Dados Básicos */}
             <div>
               <h3 className="text-white font-semibold mb-3">Dados Básicos</h3>
               <div className="grid grid-cols-2 gap-4">
@@ -670,7 +728,6 @@ export default function Clients() {
               </div>
             </div>
 
-            {/* Endereço */}
             <div>
               <h3 className="text-white font-semibold mb-3">Endereço (Opcional)</h3>
               <div className="grid grid-cols-2 gap-4">
@@ -796,7 +853,6 @@ export default function Clients() {
         </DialogContent>
       </Dialog>
 
-      {/* Alert Dialog de Confirmação de Exclusão */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent className="bg-gray-900/95 backdrop-blur-xl border border-white/10">
           <AlertDialogHeader>
