@@ -63,13 +63,16 @@ export default function QuickSearch({ open, onClose, onSelectProduct }: QuickSea
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl backdrop-blur-2xl bg-gradient-to-br from-purple-900/95 to-pink-900/95 border-white/20">
+      <DialogContent className="max-w-3xl backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-white flex items-center gap-2">
-            <Search className="w-6 h-6" />
+            <Search className="w-6 h-6 text-cyan-300" />
             Busca Rápida de Produtos
           </DialogTitle>
-          <p className="text-white/70 text-sm">Pressione ESC para fechar</p>
+          <DialogDescription className="text-white/70 text-sm">
+            Pesquise por nome, código ou descrição e veja os preços à vista e a prazo.
+          </DialogDescription>
+          <p className="text-white/60 text-xs">Pressione ESC para fechar</p>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -83,14 +86,15 @@ export default function QuickSearch({ open, onClose, onSelectProduct }: QuickSea
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/50 h-12 text-lg"
+              className="pl-10 bg-white/5 border-white/20 text-white placeholder:text-white/50 h-12 text-lg"
             />
           </div>
 
           {/* Resultados */}
           <div className="max-h-[400px] overflow-y-auto space-y-2">
             {loading ? (
-              <div className="text-center py-8 text-white/70">
+              <div className="text-center py-10 text-white/70">
+                <div className="mx-auto mb-3 h-10 w-10 rounded-full border-2 border-white/15 border-t-cyan-300 animate-spin" />
                 Carregando produtos...
               </div>
             ) : searchTerm === '' ? (
@@ -108,7 +112,7 @@ export default function QuickSearch({ open, onClose, onSelectProduct }: QuickSea
                 <div
                   key={product.id}
                   onClick={() => handleSelectProduct(product)}
-                  className="p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-all cursor-pointer border border-white/10 hover:border-white/30"
+                  className="p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-all cursor-pointer border border-white/10 hover:border-cyan-300/30"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -126,16 +130,19 @@ export default function QuickSearch({ open, onClose, onSelectProduct }: QuickSea
                         <p className="text-white/70 text-sm mt-1">{product.description}</p>
                       )}
                       {product.categoryName && (
-                        <span className="inline-block mt-2 px-2 py-1 rounded-md bg-purple-500/20 text-purple-300 text-xs">
+                        <span className="inline-block mt-2 px-2 py-1 rounded-md bg-cyan-500/15 text-cyan-300 text-xs border border-cyan-400/20">
                           {product.categoryName}
                         </span>
                       )}
                     </div>
-                    <div className="text-right ml-4">
-                      <p className="text-green-400 font-bold text-xl">
-                        R$ {formatCurrency(product.price)}
+                    <div className="text-right ml-4 min-w-[140px]">
+                      <p className="text-emerald-300 font-bold text-sm">
+                        À vista: R$ {formatCurrency(product.cashPrice || product.price)}
                       </p>
-                      <p className={`text-sm font-semibold mt-1 ${
+                      <p className="text-cyan-300 font-bold text-sm mt-1">
+                        A prazo: R$ {formatCurrency(product.creditPrice || product.price)}
+                      </p>
+                      <p className={`text-sm font-semibold mt-2 ${
                         product.currentStock <= 0 
                           ? 'text-red-400' 
                           : product.currentStock <= product.minStock 

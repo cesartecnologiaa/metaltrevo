@@ -532,7 +532,7 @@ export default function PDV() {
       <Layout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
-            <Loader2 className="w-12 h-12 animate-spin text-blue-500 mx-auto mb-4" />
+            <Loader2 className="w-12 h-12 animate-spin text-white/80 mx-auto mb-4" />
             <p className="text-white/70">Carregando produtos...</p>
           </div>
         </div>
@@ -542,39 +542,31 @@ export default function PDV() {
 
   return (
     <Layout>
-      <div className="space-y-4 pb-24">
+      <div className="space-y-4 pb-10">
         {/* Header */}
         <div>
           <h1 className="text-4xl font-bold text-white mb-2">PDV - Ponto de Venda</h1>
           <p className="text-white/70">Realize vendas de forma rápida e eficiente</p>
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-zinc-950/88 backdrop-blur-xl shadow-[0_-10px_30px_rgba(0,0,0,0.25)]">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-2 px-3 py-3 md:justify-between">
-            <div className="text-sm font-semibold text-white">
-              Atalhos do PDV
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-2 md:justify-end">
-              {[
-                ['F2', 'Produto'],
-                ['F3', 'Cliente'],
-                ['F4', 'Dinheiro'],
-                ['F5', 'Finalizar'],
-                ['F6', 'Desconto'],
-                ['F8', 'Limpar'],
-                ['Ctrl+Del', 'Remover'],
-                ['Ctrl + / -', 'Qtd.'],
-              ].map(([shortcut, label]) => (
-                <span key={shortcut} className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
-                  <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
-                    {shortcut}
-                  </kbd>
-                  {label}
-                </span>
-              ))}
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            ['F2', 'Produto'],
+            ['F3', 'Cliente'],
+            ['F4', 'Dinheiro'],
+            ['F5', 'Finalizar'],
+            ['F6', 'Desconto'],
+            ['F8', 'Limpar'],
+            ['Ctrl+Del', 'Remover'],
+            ['Ctrl + / -', 'Qtd.'],
+          ].map(([shortcut, label]) => (
+            <span key={shortcut} className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-white/75">
+              <kbd className="rounded-md border border-white/10 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
+                {shortcut}
+              </kbd>
+              {label}
+            </span>
+          ))}
         </div>
 
         {/* Alerta de Caixa Fechado */}
@@ -708,7 +700,7 @@ export default function PDV() {
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
                 onKeyDown={handleSearchProduct}
-                className="pl-12 h-14 text-lg bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                className="pl-12 h-14 text-lg bg-white/5 border-white/20 text-white placeholder:text-white/50"
               />
             </div>
             {/* Lista de produtos filtrados */}
@@ -718,7 +710,7 @@ export default function PDV() {
                   <button
                     key={product.id}
                     onClick={() => selectProduct(product)}
-                    className="w-full p-3 bg-white/10 hover:bg-white/20 rounded-lg text-left transition-colors"
+                    className="w-full p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-left transition-colors"
                   >
                     <div className="flex justify-between items-start">
                       <div>
@@ -726,8 +718,9 @@ export default function PDV() {
                         <p className="text-white/60 text-sm">Código: {product.code}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-white font-bold">R$ {formatCurrency(getProductPrice(product))}</p>
-                        <p className="text-white/60 text-sm">Estoque: {product.currentStock}</p>
+                        <p className="text-emerald-300 font-bold text-sm">À vista: R$ {formatCurrency(product.cashPrice || product.price)}</p>
+                        <p className="text-cyan-300 font-bold text-sm mt-1">A prazo: R$ {formatCurrency(product.creditPrice || product.price)}</p>
+                        <p className="text-white/60 text-sm mt-1">Estoque: {product.currentStock}</p>
                       </div>
                     </div>
                   </button>

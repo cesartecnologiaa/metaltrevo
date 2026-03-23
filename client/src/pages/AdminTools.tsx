@@ -2,19 +2,60 @@ import { useState } from 'react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, Trash2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Trash2, Wallet, Banknote, Database } from 'lucide-react';
 import { toast } from 'sonner';
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
+type ActionKey = 'sales' | 'cash' | 'withdrawals' | 'payables' | 'receivables' | 'all';
+
+const COLLECTIONS: Record<ActionKey, { title: string; description: string; collections: string[]; danger?: boolean; icon: any }> = {
+  sales: {
+    title: 'Limpar Vendas',
+    description: 'Deleta todas as vendas registradas no sistema.',
+    collections: ['sales'],
+    icon: Trash2,
+  },
+  cash: {
+    title: 'Limpar Caixas',
+    description: 'Deleta todos os registros de caixas abertos/fechados.',
+    collections: ['cashRegisters'],
+    icon: Wallet,
+  },
+  withdrawals: {
+    title: 'Limpar Sangrias',
+    description: 'Deleta todos os registros de sangrias de caixa.',
+    collections: ['cashWithdrawals'],
+    icon: Banknote,
+  },
+  payables: {
+    title: 'Limpar Contas a Pagar',
+    description: 'Deleta todas as contas a pagar cadastradas.',
+    collections: ['accountsPayable'],
+    icon: Wallet,
+  },
+  receivables: {
+    title: 'Limpar Contas a Receber',
+    description: 'Deleta todas as contas a receber cadastradas.',
+    collections: ['accountsReceivable'],
+    icon: Wallet,
+  },
+  all: {
+    title: 'Apagar tudo do banco',
+    description: 'Deleta os principais dados do sistema: vendas, caixa, sangrias, contas a pagar/receber, clientes, produtos, categorias, fornecedores, cotações, usuários, estoque e configurações.',
+    collections: ['sales', 'cashRegisters', 'cashWithdrawals', 'accountsPayable', 'accountsReceivable', 'clients', 'products', 'categories', 'suppliers', 'quotations', 'stock_movements', 'users', 'settings'],
+    danger: true,
+    icon: Database,
+  },
+};
+
 export default function AdminTools() {
   const { userData } = useAuthContext();
   const [loading, setLoading] = useState(false);
-  const [confirmDialog, setConfirmDialog] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ActionKey | null>(null);
 
-  // Verificar se é admin
   if (userData?.role !== 'admin') {
     return (
       <Layout>
@@ -31,127 +72,46 @@ export default function AdminTools() {
     );
   }
 
-  const handleClearSales = async () => {
-    try {
-      setLoading(true);
-      const salesSnapshot = await getDocs(collection(db, 'sales'));
-      
-      if (salesSnapshot.empty) {
-        toast.info('Nenhuma venda encontrada para deletar');
-        return;
-      }
-
-      let deleted = 0;
-      for (const saleDoc of salesSnapshot.docs) {
-        await deleteDoc(doc(db, 'sales', saleDoc.id));
+  const deleteCollections = async (collectionsToClear: string[]) => {
+    let deleted = 0;
+    for (const collectionName of collectionsToClear) {
+      const snapshot = await getDocs(collection(db, collectionName));
+      for (const snapshotDoc of snapshot.docs) {
+        await deleteDoc(doc(db, collectionName, snapshotDoc.id));
         deleted++;
       }
-
-      toast.success(`${deleted} vendas deletadas com sucesso!`);
-      setConfirmDialog(null);
-    } catch (error) {
-      console.error('Error clearing sales:', error);
-      toast.error('Erro ao deletar vendas');
-    } finally {
-      setLoading(false);
     }
+    return deleted;
   };
 
-  const handleClearCashRegisters = async () => {
+  const handleAction = async (action: ActionKey) => {
     try {
       setLoading(true);
-      const cashSnapshot = await getDocs(collection(db, 'cashRegisters'));
-      
-      if (cashSnapshot.empty) {
-        toast.info('Nenhum caixa encontrado para deletar');
-        return;
+      const deleted = await deleteCollections(COLLECTIONS[action].collections);
+      if (deleted === 0) {
+        toast.info('Nenhum registro encontrado para deletar.');
+      } else {
+        toast.success(`${deleted} registro(s) deletado(s) com sucesso!`);
       }
-
-      let deleted = 0;
-      for (const cashDoc of cashSnapshot.docs) {
-        await deleteDoc(doc(db, 'cashRegisters', cashDoc.id));
-        deleted++;
-      }
-
-      toast.success(`${deleted} caixas deletados com sucesso!`);
       setConfirmDialog(null);
     } catch (error) {
-      console.error('Error clearing cash registers:', error);
-      toast.error('Erro ao deletar caixas');
+      console.error(`Error clearing ${action}:`, error);
+      toast.error('Erro ao deletar registros.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleClearWithdrawals = async () => {
-    try {
-      setLoading(true);
-      const withdrawalsSnapshot = await getDocs(collection(db, 'cashWithdrawals'));
-      
-      if (withdrawalsSnapshot.empty) {
-        toast.info('Nenhuma sangria encontrada para deletar');
-        return;
-      }
-
-      let deleted = 0;
-      for (const withdrawalDoc of withdrawalsSnapshot.docs) {
-        await deleteDoc(doc(db, 'cashWithdrawals', withdrawalDoc.id));
-        deleted++;
-      }
-
-      toast.success(`${deleted} sangrias deletadas com sucesso!`);
-      setConfirmDialog(null);
-    } catch (error) {
-      console.error('Error clearing withdrawals:', error);
-      toast.error('Erro ao deletar sangrias');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleClearAll = async () => {
-    try {
-      setLoading(true);
-      
-      // Deletar vendas
-      const salesSnapshot = await getDocs(collection(db, 'sales'));
-      for (const saleDoc of salesSnapshot.docs) {
-        await deleteDoc(doc(db, 'sales', saleDoc.id));
-      }
-
-      // Deletar caixas
-      const cashSnapshot = await getDocs(collection(db, 'cashRegisters'));
-      for (const cashDoc of cashSnapshot.docs) {
-        await deleteDoc(doc(db, 'cashRegisters', cashDoc.id));
-      }
-
-      // Deletar sangrias
-      const withdrawalsSnapshot = await getDocs(collection(db, 'cashWithdrawals'));
-      for (const withdrawalDoc of withdrawalsSnapshot.docs) {
-        await deleteDoc(doc(db, 'cashWithdrawals', withdrawalDoc.id));
-      }
-
-      const total = salesSnapshot.size + cashSnapshot.size + withdrawalsSnapshot.size;
-      toast.success(`${total} registros deletados com sucesso!`);
-      setConfirmDialog(null);
-    } catch (error) {
-      console.error('Error clearing all data:', error);
-      toast.error('Erro ao deletar dados');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const cards: ActionKey[] = ['sales', 'cash', 'withdrawals', 'payables', 'receivables', 'all'];
 
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header */}
         <div>
           <h1 className="text-3xl font-bold text-white">Ferramentas Administrativas</h1>
           <p className="text-white/70">Gerenciamento e limpeza de dados do sistema</p>
         </div>
 
-        {/* Aviso de Perigo */}
         <Card className="bg-red-500/10 border-red-500/30">
           <CardContent className="p-6">
             <div className="flex items-start gap-4">
@@ -159,150 +119,53 @@ export default function AdminTools() {
               <div>
                 <h3 className="text-lg font-semibold text-red-400 mb-2">⚠️ Zona de Perigo</h3>
                 <p className="text-white/80">
-                  As ações abaixo são <strong>irreversíveis</strong> e deletarão permanentemente os dados do banco de dados.
-                  Use com extrema cautela!
+                  As ações abaixo são <strong>irreversíveis</strong> e deletam permanentemente os dados do banco.
+                  O botão de apagar tudo remove as principais coleções conhecidas do sistema.
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Ações de Limpeza */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Limpar Vendas */}
-          <Card className="bg-white/10 border-white/20">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <Trash2 className="w-5 h-5" />
-                Limpar Vendas
-              </CardTitle>
-              <CardDescription className="text-white/70">
-                Deleta todas as vendas registradas no sistema
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={() => setConfirmDialog('sales')}
-                disabled={loading}
-                variant="destructive"
-                className="w-full"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Processando...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Deletar Todas as Vendas
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Limpar Caixas */}
-          <Card className="bg-white/10 border-white/20">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <Trash2 className="w-5 h-5" />
-                Limpar Caixas
-              </CardTitle>
-              <CardDescription className="text-white/70">
-                Deleta todos os registros de caixas abertos/fechados
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={() => setConfirmDialog('cash')}
-                disabled={loading}
-                variant="destructive"
-                className="w-full"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Processando...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Deletar Todos os Caixas
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Limpar Sangrias */}
-          <Card className="bg-white/10 border-white/20">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <Trash2 className="w-5 h-5" />
-                Limpar Sangrias
-              </CardTitle>
-              <CardDescription className="text-white/70">
-                Deleta todos os registros de sangrias de caixa
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={() => setConfirmDialog('withdrawals')}
-                disabled={loading}
-                variant="destructive"
-                className="w-full"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Processando...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Deletar Todas as Sangrias
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Limpar Tudo */}
-          <Card className="bg-red-500/20 border-red-500/40">
-            <CardHeader>
-              <CardTitle className="text-red-400 flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5" />
-                Limpar TUDO
-              </CardTitle>
-              <CardDescription className="text-white/70">
-                Deleta TODOS os dados: vendas, caixas e sangrias
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={() => setConfirmDialog('all')}
-                disabled={loading}
-                variant="destructive"
-                className="w-full bg-red-600 hover:bg-red-700"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Processando...
-                  </>
-                ) : (
-                  <>
-                    <AlertTriangle className="w-4 h-4 mr-2" />
-                    DELETAR TUDO
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {cards.map((key) => {
+            const cfg = COLLECTIONS[key];
+            const Icon = cfg.icon;
+            const danger = !!cfg.danger;
+            return (
+              <Card key={key} className={danger ? 'bg-red-500/20 border-red-500/40' : 'bg-white/10 border-white/20'}>
+                <CardHeader>
+                  <CardTitle className={`${danger ? 'text-red-400' : 'text-white'} flex items-center gap-2`}>
+                    <Icon className="w-5 h-5" />
+                    {cfg.title}
+                  </CardTitle>
+                  <CardDescription className="text-white/70">{cfg.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    onClick={() => setConfirmDialog(key)}
+                    disabled={loading}
+                    variant="destructive"
+                    className={`w-full ${danger ? 'bg-red-600 hover:bg-red-700' : ''}`}
+                  >
+                    {loading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Processando...
+                      </>
+                    ) : (
+                      <>
+                        <Icon className="w-4 h-4 mr-2" />
+                        {danger ? 'APAGAR TUDO' : `Deletar ${cfg.title.replace('Limpar ', '')}`}
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
-        {/* Dialog de Confirmação */}
         <Dialog open={confirmDialog !== null} onOpenChange={() => setConfirmDialog(null)}>
           <DialogContent className="bg-gray-900 text-white border-gray-800">
             <DialogHeader>
@@ -316,7 +179,7 @@ export default function AdminTools() {
             </DialogHeader>
             <div className="py-4">
               <p className="text-white/90">
-                Tem certeza que deseja continuar?
+                {confirmDialog ? COLLECTIONS[confirmDialog].description : 'Tem certeza que deseja continuar?'}
               </p>
             </div>
             <DialogFooter>
@@ -325,12 +188,7 @@ export default function AdminTools() {
               </Button>
               <Button
                 variant="destructive"
-                onClick={() => {
-                  if (confirmDialog === 'sales') handleClearSales();
-                  else if (confirmDialog === 'cash') handleClearCashRegisters();
-                  else if (confirmDialog === 'withdrawals') handleClearWithdrawals();
-                  else if (confirmDialog === 'all') handleClearAll();
-                }}
+                onClick={() => confirmDialog && handleAction(confirmDialog)}
                 disabled={loading}
               >
                 {loading ? 'Deletando...' : 'Sim, Deletar'}
