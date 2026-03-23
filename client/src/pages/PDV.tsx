@@ -107,18 +107,21 @@ export default function PDV() {
       const isTyping = tag === 'input' || tag === 'textarea' || target?.isContentEditable;
 
       if (event.key === 'Escape') {
+        event.preventDefault();
         if (productSearch) {
-          event.preventDefault();
           setProductSearch('');
           searchInputRef.current?.focus();
           return;
         }
         if (clientSearch) {
-          event.preventDefault();
           setClientSearch('');
           clientSearchInputRef.current?.focus();
           return;
         }
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+        return;
       }
 
       if (event.key === 'F2') {
@@ -141,11 +144,29 @@ export default function PDV() {
         return;
       }
 
-      if (event.key === 'F5' && !isTyping) {
+      if (event.key === 'F5') {
         event.preventDefault();
-        if (!processing && cart.length > 0 && cashRegisterOpen) {
-          finalizeSale();
+
+        if (processing) {
+          toast.error('Já existe uma venda sendo processada.');
+          return;
         }
+        if (!cashRegisterOpen) {
+          toast.error('Caixa fechado! Abra o caixa antes de realizar vendas.');
+          return;
+        }
+        if (cart.length === 0) {
+          toast.error('Adicione pelo menos um produto ao carrinho.');
+          return;
+        }
+        if (!selectedClient) {
+          toast.error('Selecione um cliente!');
+          return;
+        }
+
+        requestAnimationFrame(() => {
+          finalizeSale();
+        });
         return;
       }
 
@@ -156,13 +177,15 @@ export default function PDV() {
         return;
       }
 
-      if (event.key === 'F8' && !isTyping) {
+      if (event.key === 'F8') {
         event.preventDefault();
         if (cart.length > 0) clearCart();
         return;
       }
 
-      if (event.ctrlKey && event.key === 'Delete' && !isTyping) {
+      if (isTyping) return;
+
+      if (event.ctrlKey && event.key === 'Delete') {
         event.preventDefault();
         if (selectedCartItemId) {
           removeFromCart(selectedCartItemId);
@@ -170,14 +193,14 @@ export default function PDV() {
         return;
       }
 
-      if (event.ctrlKey && (event.key === '+' || event.key === '=' ) && !isTyping) {
+      if (event.ctrlKey && (event.key === '+' || event.key === '=')) {
         event.preventDefault();
         const selectedItem = cart.find(item => item.id === selectedCartItemId);
         if (selectedItem) updateQuantity(selectedItem.id, selectedItem.quantity + 1);
         return;
       }
 
-      if (event.ctrlKey && event.key === '-' && !isTyping) {
+      if (event.ctrlKey && event.key === '-') {
         event.preventDefault();
         const selectedItem = cart.find(item => item.id === selectedCartItemId);
         if (selectedItem) updateQuantity(selectedItem.id, selectedItem.quantity - 1);
@@ -186,7 +209,7 @@ export default function PDV() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [productSearch, clientSearch, processing, cart, cashRegisterOpen, selectedCartItemId, discount]);
+  }, [productSearch, clientSearch, processing, cart, cashRegisterOpen, selectedCartItemId, selectedClient]);
 
   // Recalcular preços do carrinho quando forma de pagamento ou parcelas mudam
   useEffect(() => {
@@ -450,20 +473,22 @@ export default function PDV() {
         saleData.installments = installments;
       }
 
+      const saleNumber = `VD${String(Math.floor(Math.random() * 999999)).padStart(6, '0')}`;
+
       // Salvar venda no Firebase
       const saleId = await createSale(saleData);
       
-      // Se for boleto ou crédito parcelado, criar conta a receber
-      if ((paymentMethod === 'boleto' || paymentMethod === 'cartao_credito') && installmentCount > 1) {
+      // Boleto sempre gera conta a receber; crédito só quando parcelado
+      if (paymentMethod === 'boleto' || (paymentMethod === 'cartao_credito' && installmentCount > 1)) {
         const { createAccountReceivable } = await import('@/services/accountsReceivableService');
         await createAccountReceivable(
           saleId,
-          `VD${String(Math.floor(Math.random() * 999999)).padStart(6, '0')}`,
+          saleNumber,
           selectedClient.id,
           selectedClient.name,
           selectedClient.cpfCnpj,
           calculateTotal(),
-          installmentCount
+          paymentMethod === 'boleto' ? Math.max(1, installmentCount) : installmentCount
         );
       }
       
@@ -473,7 +498,7 @@ export default function PDV() {
       const completeSale: Sale = {
         ...saleData,
         id: saleId,
-        saleNumber: `VD${String(Math.floor(Math.random() * 999999)).padStart(6, '0')}`,
+        saleNumber,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -524,7 +549,6 @@ export default function PDV() {
           <p className="text-white/70">Realize vendas de forma rápida e eficiente</p>
         </div>
 
-        {/* Barra fixa de atalhos no rodapé */}
         <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-zinc-950/88 backdrop-blur-xl shadow-[0_-10px_30px_rgba(0,0,0,0.25)]">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-2 px-3 py-3 md:justify-between">
             <div className="text-sm font-semibold text-white">
@@ -532,61 +556,23 @@ export default function PDV() {
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-2 md:justify-end">
-              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
-                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
-                  F2
-                </kbd>
-                Produto
-              </span>
-
-              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
-                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
-                  F3
-                </kbd>
-                Cliente
-              </span>
-
-              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
-                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
-                  F4
-                </kbd>
-                Dinheiro
-              </span>
-
-              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
-                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
-                  F5
-                </kbd>
-                Finalizar
-              </span>
-
-              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
-                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
-                  F6
-                </kbd>
-                Desconto
-              </span>
-
-              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
-                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
-                  F8
-                </kbd>
-                Limpar
-              </span>
-
-              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
-                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
-                  Ctrl+Del
-                </kbd>
-                Remover
-              </span>
-
-              <span className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
-                <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
-                  Ctrl + / -
-                </kbd>
-                Qtd.
-              </span>
+              {[
+                ['F2', 'Produto'],
+                ['F3', 'Cliente'],
+                ['F4', 'Dinheiro'],
+                ['F5', 'Finalizar'],
+                ['F6', 'Desconto'],
+                ['F8', 'Limpar'],
+                ['Ctrl+Del', 'Remover'],
+                ['Ctrl + / -', 'Qtd.'],
+              ].map(([shortcut, label]) => (
+                <span key={shortcut} className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1 text-xs font-medium text-white/80 border border-white/10">
+                  <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-cyan-200">
+                    {shortcut}
+                  </kbd>
+                  {label}
+                </span>
+              ))}
             </div>
           </div>
         </div>
