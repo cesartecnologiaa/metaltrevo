@@ -584,6 +584,17 @@ export default function Clients() {
             <DialogDescription className="text-white/70">
               Visualize os pagamentos pendentes do cliente e dê baixa nas parcelas em aberto.
             </DialogDescription>
+            {selectedPendingClient && (
+              <div>
+                <Button
+                  onClick={() => goToAccountsReceivable(selectedPendingClient)}
+                  variant="outline"
+                  className="border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10"
+                >
+                  Abrir tela completa de contas a receber
+                </Button>
+              </div>
+            )}
           </DialogHeader>
 
           {loadingPendingInstallments ? (

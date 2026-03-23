@@ -12,9 +12,10 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { generateCashClosingReport } from '@/utils/cashReportPDF';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
-import { formatCurrency, formatPaymentMethod } from '@/lib/formatters';
+import { formatCurrency } from '@/lib/formatters';
 import CashClosureReceipt from '@/components/CashClosureReceipt';
 import { usePrintReceipt } from '@/hooks/usePrintReceipt';
+import { getTodayReceivablePayments, TodayReceivablePayment } from '@/services/accountsReceivableService';
 
 export default function CashRegister() {
   const { userData } = useAuthContext();
@@ -24,6 +25,7 @@ export default function CashRegister() {
   const [cashRegister, setCashRegister] = useState<CashRegisterType | null>(null);
   const [withdrawals, setWithdrawals] = useState<CashWithdrawal[]>([]);
   const [sales, setSales] = useState<any[]>([]);
+  const [receivablePayments, setReceivablePayments] = useState<TodayReceivablePayment[]>([]);
   const [closedCashData, setClosedCashData] = useState<any>(null);
   
   // Estados para diálogos
@@ -56,12 +58,14 @@ export default function CashRegister() {
       setCashRegister(openCash);
 
       if (openCash) {
-        const [withdrawalsData, salesData] = await Promise.all([
+        const [withdrawalsData, salesData, receivablePaymentsData] = await Promise.all([
           cashService.getWithdrawals(openCash.id!),
           cashService.getTodaySales(),
+          getTodayReceivablePayments(),
         ]);
         setWithdrawals(withdrawalsData);
         setSales(salesData);
+        setReceivablePayments(receivablePaymentsData);
       }
     } catch (error) {
       console.error('Error loading cash register:', error);
@@ -102,8 +106,9 @@ export default function CashRegister() {
     try {
       setLoading(true);
       const totalSales = sales.reduce((sum, sale) => sum + getSaleCashImpact(sale), 0);
+      const totalReceivables = receivablePayments.reduce((sum, payment) => sum + Number(payment.amountReceived || 0), 0);
       const totalWithdrawals = withdrawals.reduce((sum, w) => sum + w.amount, 0);
-      const finalBalance = cashRegister.initialBalance + totalSales - totalWithdrawals;
+      const finalBalance = cashRegister.initialBalance + totalSales + totalReceivables - totalWithdrawals;
 
       await cashService.closeCashRegister(
         cashRegister.id!,
@@ -122,6 +127,7 @@ export default function CashRegister() {
         closedByName: userData?.name || 'Usuário',
         initialBalance: cashRegister.initialBalance,
         totalSales,
+        totalReceivables,
         totalWithdrawals,
         finalBalance,
       };
@@ -153,6 +159,7 @@ export default function CashRegister() {
         salesByPaymentMethod,
         withdrawals,
         totalSales,
+        totalReceivablePayments: totalReceivableReceipts,
         totalWithdrawals,
         finalBalance: currentBalance,
         companySettings: settings,
@@ -199,21 +206,14 @@ export default function CashRegister() {
   };
 
   const totalSales = sales.reduce((sum, sale) => sum + getSaleCashImpact(sale), 0);
+  const totalReceivableReceipts = receivablePayments.reduce((sum, payment) => sum + Number(payment.amountReceived || 0), 0);
   const totalWithdrawals = withdrawals.reduce((sum, w) => sum + w.amount, 0);
   const currentBalance = cashRegister
-    ? cashRegister.initialBalance + totalSales - totalWithdrawals
+    ? cashRegister.initialBalance + totalSales + totalReceivableReceipts - totalWithdrawals
     : 0;
 
-  // Agrupar vendas por forma de pagamento
-  const salesByPaymentMethod = sales.reduce((acc, sale) => {
-    const method = (sale as any).paymentMethod || 'Não informado';
-    if (!acc[method]) {
-      acc[method] = { count: 0, total: 0 };
-    }
-    acc[method].count++;
-    acc[method].total += getSaleCashImpact(sale);
-    return acc;
-  }, {} as Record<string, { count: number; total: number }>);
+  // Mantido para compatibilidade com o PDF, mas não exibido na tela
+  const salesByPaymentMethod = {} as Record<string, { count: number; total: number }>;
 
   return (
     <Layout>
@@ -266,7 +266,7 @@ export default function CashRegister() {
         {/* Cards de Resumo */}
         {cashRegister && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <Card className="bg-white/10 border-white/20">
                 <CardHeader className="pb-2">
                   <CardDescription className="text-white/70">Saldo Inicial</CardDescription>
@@ -287,6 +287,18 @@ export default function CashRegister() {
                     +R$ {totalSales.toFixed(2)}
                   </p>
                   <p className="text-sm text-white/50">{sales.length} vendas</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/10 border-white/20">
+                <CardHeader className="pb-2">
+                  <CardDescription className="text-white/70">Recebimentos do Dia</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold text-emerald-300">
+                    +R$ {totalReceivableReceipts.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-white/50">{receivablePayments.length} baixas</p>
                 </CardContent>
               </Card>
 
@@ -314,30 +326,35 @@ export default function CashRegister() {
               </Card>
             </div>
 
-            {/* Vendas por Forma de Pagamento */}
-            <Card className="bg-white/10 border-white/20">
-              <CardHeader>
-                <CardTitle className="text-white">Vendas por Forma de Pagamento</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {Object.entries(salesByPaymentMethod).map(([method, data]: [string, any]) => (
-                    <div key={method} className="flex justify-between items-center p-3 bg-white/5 rounded">
-                      <div>
-                        <p className="text-white font-medium">
-                          {formatPaymentMethod(method)}
-                        </p>
-                        <p className="text-white/50 text-sm">{data.count} {data.count === 1 ? 'venda' : 'vendas'}</p>
+            {/* Recebimentos de contas a receber */}
+            {receivablePayments.length > 0 && (
+              <Card className="bg-white/10 border-white/20">
+                <CardHeader>
+                  <CardTitle className="text-white">Baixas de Contas a Receber Hoje</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {receivablePayments.map((payment) => (
+                      <div key={`${payment.accountId}-${payment.installmentNumber}-${payment.paidAt.getTime()}`} className="flex justify-between items-center p-3 bg-white/5 rounded">
+                        <div>
+                          <p className="text-white font-medium">
+                            {payment.clientName || 'Cliente'} • Venda #{payment.saleNumber} • Parcela {payment.installmentNumber}
+                          </p>
+                          <p className="text-white/50 text-sm">
+                            {format(payment.paidAt, 'dd/MM/yyyy HH:mm')}
+                            {payment.paidByName ? ` • ${payment.paidByName}` : ''}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-emerald-300 font-bold">+R$ {Number(payment.amountReceived || 0).toFixed(2)}</p>
+                          <p className="text-white/50 text-xs">Parcela: R$ {Number(payment.originalAmount || 0).toFixed(2)}</p>
+                        </div>
                       </div>
-                      <p className="text-white font-bold">R$ {formatCurrency(data.total)}</p>
-                    </div>
-                  ))}
-                  {Object.keys(salesByPaymentMethod).length === 0 && (
-                    <p className="text-white/50 text-center py-4">Nenhuma venda registrada</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Sangrias */}
             {withdrawals.length > 0 && (
@@ -409,7 +426,7 @@ export default function CashRegister() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="p-4 bg-white/5 rounded">
                   <p className="text-sm text-white/70">Saldo Inicial</p>
                   <p className="text-xl font-bold text-white">
@@ -417,9 +434,15 @@ export default function CashRegister() {
                   </p>
                 </div>
                 <div className="p-4 bg-white/5 rounded">
-                  <p className="text-sm text-white/70">Total de Vendas</p>
+                  <p className="text-sm text-white/70">Entradas de Vendas</p>
                   <p className="text-xl font-bold text-green-400">
                     +R$ {totalSales.toFixed(2)}
+                  </p>
+                </div>
+                <div className="p-4 bg-white/5 rounded">
+                  <p className="text-sm text-white/70">Recebimentos do Dia</p>
+                  <p className="text-xl font-bold text-emerald-300">
+                    +R$ {totalReceivableReceipts.toFixed(2)}
                   </p>
                 </div>
                 <div className="p-4 bg-white/5 rounded">
