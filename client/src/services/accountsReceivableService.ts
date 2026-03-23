@@ -370,10 +370,10 @@ export async function getClientPendingBalance(clientId: string): Promise<{ total
   snapshot.docs.forEach(doc => {
     const account = doc.data() as AccountReceivable;
     account.installments.forEach(inst => {
-      if (inst.status === 'pendente') {
+      if (inst.status === 'pendente' || inst.status === 'vencida') {
         total += inst.amount;
         const dueDate = (inst.dueDate as any).toDate ? (inst.dueDate as any).toDate() : new Date(inst.dueDate as any);
-        if (dueDate < now) {
+        if (dueDate < now || inst.status === 'vencida') {
           overdue += inst.amount;
         }
       }
@@ -381,6 +381,52 @@ export async function getClientPendingBalance(clientId: string): Promise<{ total
   });
   
   return { total, overdue };
+}
+
+export async function getClientPendingInstallments(clientId: string): Promise<Array<{
+  accountId: string;
+  saleId: string;
+  saleNumber: string;
+  clientName?: string;
+  installment: Installment;
+}>> {
+  const q = query(
+    collection(db, 'accountsReceivable'),
+    where('clientId', '==', clientId),
+    where('status', 'in', ['pendente', 'parcial'])
+  );
+
+  const snapshot = await getDocs(q);
+  const pending: Array<{
+    accountId: string;
+    saleId: string;
+    saleNumber: string;
+    clientName?: string;
+    installment: Installment;
+  }> = [];
+
+  snapshot.docs.forEach((docSnapshot) => {
+    const account = docSnapshot.data() as AccountReceivable;
+    account.installments
+      .filter((inst) => inst.status === 'pendente' || inst.status === 'vencida')
+      .forEach((installment) => {
+        pending.push({
+          accountId: docSnapshot.id,
+          saleId: account.saleId,
+          saleNumber: account.saleNumber,
+          clientName: account.clientName,
+          installment,
+        });
+      });
+  });
+
+  pending.sort((a, b) => {
+    const aDate = (a.installment.dueDate as any)?.toDate ? (a.installment.dueDate as any).toDate() : new Date(a.installment.dueDate as any);
+    const bDate = (b.installment.dueDate as any)?.toDate ? (b.installment.dueDate as any).toDate() : new Date(b.installment.dueDate as any);
+    return aDate.getTime() - bDate.getTime();
+  });
+
+  return pending;
 }
 
 /**

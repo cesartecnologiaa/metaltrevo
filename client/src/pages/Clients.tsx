@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Users, CheckCircle, Phone, Mail, MapPin } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Plus, Search, Edit, Trash2, Users, CheckCircle, Phone, Mail, MapPin, DollarSign, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -25,9 +25,14 @@ import {
   formatPhone 
 } from '@/lib/validators';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useAuthContext } from '@/contexts/AuthContext';
+import { formatCurrency } from '@/lib/formatters';
+import { formatDate as formatFirestoreDate } from '@/lib/firestoreUtils';
+import { getClientPendingBalance, getClientPendingInstallments, markInstallmentAsPaid } from '@/services/accountsReceivableService';
 
 export default function Clients() {
   const permissions = usePermissions();
+  const { userData } = useAuthContext();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -37,6 +42,18 @@ export default function Clients() {
   const [saving, setSaving] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+  const [pendingBalances, setPendingBalances] = useState<Record<string, { total: number; overdue: number }>>({});
+  const [pendingDialogOpen, setPendingDialogOpen] = useState(false);
+  const [selectedPendingClient, setSelectedPendingClient] = useState<Client | null>(null);
+  const [pendingInstallments, setPendingInstallments] = useState<Array<{
+    accountId: string;
+    saleId: string;
+    saleNumber: string;
+    clientName?: string;
+    installment: any;
+  }>>([]);
+  const [loadingPendingInstallments, setLoadingPendingInstallments] = useState(false);
+  const [processingPaymentId, setProcessingPaymentId] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -257,6 +274,87 @@ export default function Clients() {
     return matchesSearch && matchesStatus;
   });
 
+  const visibleClients = useMemo(() => filteredClients.slice(0, searchTerm.trim() ? 20 : 12), [filteredClients, searchTerm]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPendingBalances = async () => {
+      if (visibleClients.length === 0) {
+        if (!cancelled) setPendingBalances({});
+        return;
+      }
+
+      try {
+        const results = await Promise.all(
+          visibleClients.map(async (client) => ({
+            clientId: client.id,
+            balance: await getClientPendingBalance(client.id),
+          }))
+        );
+
+        if (cancelled) return;
+
+        const nextBalances: Record<string, { total: number; overdue: number }> = {};
+        results.forEach(({ clientId, balance }) => {
+          nextBalances[clientId] = balance;
+        });
+        setPendingBalances(nextBalances);
+      } catch (error) {
+        console.error('Error loading pending balances:', error);
+      }
+    };
+
+    loadPendingBalances();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visibleClients]);
+
+  const openPendingDialog = async (client: Client) => {
+    setSelectedPendingClient(client);
+    setPendingDialogOpen(true);
+    setLoadingPendingInstallments(true);
+    try {
+      const data = await getClientPendingInstallments(client.id);
+      setPendingInstallments(data);
+    } catch (error) {
+      console.error('Error loading pending installments:', error);
+      toast.error('Erro ao carregar pendências do cliente');
+    } finally {
+      setLoadingPendingInstallments(false);
+    }
+  };
+
+  const handleMarkPendingAsPaid = async (accountId: string, installmentNumber: number) => {
+    if (!userData) {
+      toast.error('Usuário não identificado');
+      return;
+    }
+
+    const paymentKey = `${accountId}-${installmentNumber}`;
+    setProcessingPaymentId(paymentKey);
+    try {
+      await markInstallmentAsPaid(accountId, installmentNumber, userData.uid, userData.name);
+      toast.success('Parcela marcada como paga');
+
+      if (selectedPendingClient) {
+        const [updatedPending, updatedBalance] = await Promise.all([
+          getClientPendingInstallments(selectedPendingClient.id),
+          getClientPendingBalance(selectedPendingClient.id),
+        ]);
+        setPendingInstallments(updatedPending);
+        setPendingBalances(prev => ({ ...prev, [selectedPendingClient.id]: updatedBalance }));
+      }
+    } catch (error) {
+      console.error('Error marking installment as paid:', error);
+      toast.error('Erro ao dar baixa na parcela');
+    } finally {
+      setProcessingPaymentId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -320,7 +418,10 @@ export default function Clients() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredClients.map((client) => (
+          {visibleClients.map((client) => {
+            const pendingInfo = pendingBalances[client.id];
+            const hasPending = (pendingInfo?.total || 0) > 0;
+            return (
             <Card
               key={client.id}
               className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-5 hover:border-white/40 transition-all"
@@ -338,6 +439,25 @@ export default function Clients() {
                   </span>
                 )}
               </div>
+
+              {searchTerm.trim() && hasPending && (
+                <div className={`mb-3 rounded-lg border px-3 py-2 text-sm ${
+                  pendingInfo.overdue > 0
+                    ? 'border-red-500/30 bg-red-500/10 text-red-200'
+                    : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-200'
+                }`}>
+                  <div className="flex items-center gap-2 font-semibold">
+                    {pendingInfo.overdue > 0 ? <AlertTriangle className="w-4 h-4" /> : <DollarSign className="w-4 h-4" />}
+                    {pendingInfo.overdue > 0 ? 'Pagamentos pendentes vencidos' : 'Pagamentos pendentes'}
+                  </div>
+                  <div className="mt-1">
+                    Total em aberto: <span className="font-bold">R$ {formatCurrency(pendingInfo.total)}</span>
+                    {pendingInfo.overdue > 0 && (
+                      <span className="ml-2 text-red-300">Vencido: R$ {formatCurrency(pendingInfo.overdue)}</span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2 mb-4">
                 {client.email && (
@@ -363,54 +483,129 @@ export default function Clients() {
               </div>
 
               {/* Ações */}
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => handleOpenDialog(client)}
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 bg-white/5 border-white/20 text-white hover:bg-white/10"
-                >
-                  <Edit className="w-4 h-4 mr-1" />
-                  Editar
-                </Button>
-                <Button
-                  onClick={() => handleToggleStatus(client)}
-                  variant="outline"
-                  size="sm"
-                  className={`flex-1 ${
-                    client.active 
-                      ? 'bg-red-500/10 border-red-500/30 text-red-300 hover:bg-red-500/20'
-                      : 'bg-green-500/10 border-green-500/30 text-green-300 hover:bg-green-500/20'
-                  }`}
-                >
-                  {client.active ? (
-                    <>
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Desativar
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4 mr-1" />
-                      Reativar
-                    </>
-                  )}
-                </Button>
-                {permissions.isAdmin && (
+              <div className="space-y-2">
+                {hasPending && (
                   <Button
-                    onClick={() => handleDeleteClick(client)}
+                    onClick={() => openPendingDialog(client)}
                     variant="outline"
                     size="sm"
-                    className="bg-red-600/10 border-red-600/30 text-red-400 hover:bg-red-600/20"
+                    className="w-full border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Ver pendências / Dar baixa
                   </Button>
                 )}
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => handleOpenDialog(client)}
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 bg-white/5 border-white/20 text-white hover:bg-white/10"
+                  >
+                    <Edit className="w-4 h-4 mr-1" />
+                    Editar
+                  </Button>
+                  <Button
+                    onClick={() => handleToggleStatus(client)}
+                    variant="outline"
+                    size="sm"
+                    className={`flex-1 ${
+                      client.active 
+                        ? 'bg-red-500/10 border-red-500/30 text-red-300 hover:bg-red-500/20'
+                        : 'bg-green-500/10 border-green-500/30 text-green-300 hover:bg-green-500/20'
+                    }`}
+                  >
+                    {client.active ? (
+                      <>
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Desativar
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Reativar
+                      </>
+                    )}
+                  </Button>
+                  {permissions.isAdmin && (
+                    <Button
+                      onClick={() => handleDeleteClick(client)}
+                      variant="outline"
+                      size="sm"
+                      className="bg-red-600/10 border-red-600/30 text-red-400 hover:bg-red-600/20"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </Card>
-          ))}
+          );
+          })}
         </div>
       )}
 
+      {/* Dialog de Pendências do Cliente */}
+      <Dialog open={pendingDialogOpen} onOpenChange={setPendingDialogOpen}>
+        <DialogContent className="max-w-3xl backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20 max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-white">
+              Pendências de {selectedPendingClient?.name}
+            </DialogTitle>
+            <DialogDescription className="text-white/70">
+              Visualize os pagamentos pendentes do cliente e dê baixa nas parcelas em aberto.
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingPendingInstallments ? (
+            <div className="py-10 text-center text-white/70">Carregando pendências...</div>
+          ) : pendingInstallments.length === 0 ? (
+            <div className="py-10 text-center text-white/70">Este cliente não possui pendências em aberto.</div>
+          ) : (
+            <div className="space-y-3">
+              {pendingInstallments.map((item) => {
+                const paymentKey = `${item.accountId}-${item.installment.installmentNumber}`;
+                const isProcessing = processingPaymentId === paymentKey;
+                return (
+                  <div key={paymentKey} className="rounded-lg border border-white/10 bg-white/5 p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div className="space-y-1">
+                        <p className="text-white font-semibold">
+                          Venda #{item.saleNumber} • Parcela {item.installment.installmentNumber}
+                        </p>
+                        <p className="text-white/70 text-sm">
+                          Vencimento: {formatFirestoreDate(item.installment.dueDate)}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="text-emerald-300 font-bold">
+                            R$ {formatCurrency(item.installment.amount)}
+                          </span>
+                          <span className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                            item.installment.status === 'vencida'
+                              ? 'bg-red-500/20 text-red-300'
+                              : 'bg-yellow-500/20 text-yellow-300'
+                          }`}>
+                            {item.installment.status === 'vencida' ? 'Vencida' : 'Pendente'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <Button
+                        onClick={() => handleMarkPendingAsPaid(item.accountId, item.installment.installmentNumber)}
+                        disabled={isProcessing}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        {isProcessing ? 'Processando...' : 'Dar baixa'}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       {/* Dialog de Cadastro/Edição */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-3xl backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20 max-h-[90vh] overflow-y-auto">

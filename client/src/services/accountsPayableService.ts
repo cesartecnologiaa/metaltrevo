@@ -1,5 +1,5 @@
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, Timestamp, query, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, Timestamp, query, orderBy, limit, getDoc } from 'firebase/firestore';
 import { prepareForFirestore } from '@/lib/firestoreUtils';
 
 export interface AccountPayable {
@@ -25,6 +25,9 @@ export interface PayableInstallment {
   paidBy?: string;
   paidByName?: string;
   paymentMethod?: string;
+  originalAmount?: number;
+  partialPayment?: boolean;
+  previousBalance?: number;
 }
 
 export async function createAccountPayable(
@@ -93,6 +96,33 @@ export async function getAccountsPayable(limitCount: number = 100): Promise<Acco
   } as AccountPayable));
 }
 
+function getAccountStatus(installments: PayableInstallment[]): 'pendente' | 'paga' | 'parcial' {
+  const paidCount = installments.filter(i => i.status === 'paga').length;
+  return paidCount === installments.length ? 'paga' : paidCount > 0 ? 'parcial' : 'pendente';
+}
+
+function normalizeDueDate(dueDate: Date | Timestamp): Date {
+  if (dueDate instanceof Date) return dueDate;
+  if ((dueDate as any)?.toDate) return (dueDate as any).toDate();
+  if ((dueDate as any)?.seconds) return new Date((dueDate as any).seconds * 1000);
+  return new Date();
+}
+
+function buildNextInstallmentDueDate(baseDueDate: Date | Timestamp): Timestamp {
+  const base = normalizeDueDate(baseDueDate);
+  const next = new Date(base);
+  next.setMonth(next.getMonth() + 1);
+
+  return Timestamp.fromDate(
+    new Date(
+      next.getFullYear(),
+      next.getMonth(),
+      next.getDate(),
+      12, 0, 0, 0
+    )
+  );
+}
+
 export async function markInstallmentAsPaid(
   accountId: string,
   installmentNumber: number,
@@ -101,12 +131,13 @@ export async function markInstallmentAsPaid(
   userName: string
 ): Promise<void> {
   const accountRef = doc(db, 'accountsPayable', accountId);
-  const accountDoc = await getDocs(query(collection(db, 'accountsPayable')));
-  const account = accountDoc.docs.find(d => d.id === accountId)?.data() as AccountPayable;
+  const accountDoc = await getDoc(accountRef);
 
-  if (!account) {
+  if (!accountDoc.exists()) {
     throw new Error('Conta não encontrada');
   }
+
+  const account = accountDoc.data() as AccountPayable;
 
   const updatedInstallments = account.installments.map(inst => {
     if (inst.installmentNumber === installmentNumber) {
@@ -124,13 +155,101 @@ export async function markInstallmentAsPaid(
     return inst;
   });
 
-  const paidCount = updatedInstallments.filter(i => i.status === 'paga').length;
-  const newStatus = paidCount === updatedInstallments.length ? 'paga' : paidCount > 0 ? 'parcial' : 'pendente';
+  await updateDoc(accountRef, {
+    installments: updatedInstallments,
+    status: getAccountStatus(updatedInstallments),
+  });
+}
+
+export async function processPartialPaymentAccountPayable(
+  accountId: string,
+  installmentNumber: number,
+  paidAmount: number,
+  paymentMethod: string,
+  userId: string,
+  userName: string
+): Promise<{ remainingAmount: number; createdNewInstallment: boolean }> {
+  const accountRef = doc(db, 'accountsPayable', accountId);
+  const accountDoc = await getDoc(accountRef);
+
+  if (!accountDoc.exists()) {
+    throw new Error('Conta não encontrada');
+  }
+
+  const account = accountDoc.data() as AccountPayable;
+  const installment = account.installments.find(i => i.installmentNumber === installmentNumber);
+
+  if (!installment) {
+    throw new Error('Parcela não encontrada');
+  }
+
+  if (paidAmount <= 0) {
+    throw new Error('O valor pago deve ser maior que zero');
+  }
+
+  if (paidAmount > installment.amount) {
+    throw new Error('O valor pago não pode ser maior que o valor da parcela');
+  }
+
+  if (paidAmount === installment.amount) {
+    await markInstallmentAsPaid(accountId, installmentNumber, paymentMethod, userId, userName);
+    return { remainingAmount: 0, createdNewInstallment: false };
+  }
+
+  const remainingAmount = Number((installment.amount - paidAmount).toFixed(2));
+  const updatedInstallments = account.installments.map(inst => {
+    if (inst.installmentNumber === installmentNumber) {
+      return {
+        installmentNumber: inst.installmentNumber,
+        dueDate: inst.dueDate,
+        amount: paidAmount,
+        originalAmount: installment.amount,
+        status: 'paga' as const,
+        paidAt: Timestamp.now(),
+        paidBy: userId,
+        paidByName: userName,
+        paymentMethod,
+        partialPayment: true,
+      };
+    }
+
+    if (inst.installmentNumber === installmentNumber + 1 && inst.status !== 'paga') {
+      return {
+        ...inst,
+        amount: Number((inst.amount + remainingAmount).toFixed(2)),
+        previousBalance: remainingAmount,
+      };
+    }
+
+    return inst;
+  });
+
+  const hasNextPendingInstallment = account.installments.some(
+    inst => inst.installmentNumber === installmentNumber + 1 && inst.status !== 'paga'
+  );
+
+  let createdNewInstallment = false;
+
+  if (!hasNextPendingInstallment) {
+    const highestInstallmentNumber = Math.max(...account.installments.map(inst => inst.installmentNumber));
+    updatedInstallments.push({
+      installmentNumber: highestInstallmentNumber + 1,
+      dueDate: buildNextInstallmentDueDate(installment.dueDate),
+      amount: remainingAmount,
+      status: 'pendente',
+      previousBalance: remainingAmount,
+    });
+    createdNewInstallment = true;
+  }
+
+  updatedInstallments.sort((a, b) => a.installmentNumber - b.installmentNumber);
 
   await updateDoc(accountRef, {
     installments: updatedInstallments,
-    status: newStatus,
+    status: getAccountStatus(updatedInstallments),
   });
+
+  return { remainingAmount, createdNewInstallment };
 }
 
 export async function deleteAccountPayable(accountId: string): Promise<void> {

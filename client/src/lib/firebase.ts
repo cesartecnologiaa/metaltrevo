@@ -14,27 +14,20 @@ const firebaseConfig = {
   measurementId: "G-8TTWCK9PLN"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Auth with persistence
 export const auth = getAuth(app);
 setPersistence(auth, browserLocalPersistence);
 
-// Segunda instância do Auth para criar usuários sem afetar a sessão atual
-// Usada apenas para operações administrativas de criação de usuários
 const secondaryApp = initializeApp(firebaseConfig, "Secondary");
 export const secondaryAuth = getAuth(secondaryApp);
 
-// Initialize Firestore with memory cache
 export const db = initializeFirestore(app, {
   localCache: memoryLocalCache(),
 });
 
-// Initialize Firebase Storage
 export const storage = getStorage(app);
 
-// Initialize Analytics
 export const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
 
 export default app;

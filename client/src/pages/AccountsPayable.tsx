@@ -15,7 +15,7 @@ import { addPDFHeader, addPDFFooter } from '@/utils/pdfHeader';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
 import * as XLSX from 'xlsx';
 import { useAuthContext } from '@/contexts/AuthContext';
-import { AccountPayable, createAccountPayable, getAccountsPayable, markInstallmentAsPaid, deleteAccountPayable } from '@/services/accountsPayableService';
+import { AccountPayable, PayableInstallment, createAccountPayable, getAccountsPayable, markInstallmentAsPaid, processPartialPaymentAccountPayable, deleteAccountPayable } from '@/services/accountsPayableService';
 
 export default function AccountsPayable() {
   const { userData } = useAuthContext();
@@ -24,6 +24,10 @@ export default function AccountsPayable() {
   const [loading, setLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<AccountPayable | null>(null);
+  const [selectedInstallment, setSelectedInstallment] = useState<PayableInstallment | null>(null);
+  const [paidAmount, setPaidAmount] = useState('');
   
   // Form states
   const [description, setDescription] = useState('');
@@ -87,16 +91,59 @@ export default function AccountsPayable() {
     }
   };
 
-  const handleMarkAsPaid = async (accountId: string, installmentNumber: number) => {
-    if (!userData) return;
+  const handleOpenPaymentDialog = (account: AccountPayable, installment: PayableInstallment) => {
+    setSelectedAccount(account);
+    setSelectedInstallment(installment);
+    setPaidAmount(String(installment.amount));
+    setPaymentDialogOpen(true);
+  };
 
+  const handleProcessPayment = async () => {
+    if (!userData || !selectedAccount || !selectedInstallment) return;
+
+    const amount = parseFloat(paidAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Valor inválido');
+      return;
+    }
+
+    if (amount > selectedInstallment.amount) {
+      toast.error('O valor não pode ser maior que o valor da parcela');
+      return;
+    }
+
+    setProcessing(true);
     try {
-      await markInstallmentAsPaid(accountId, installmentNumber, 'dinheiro', userData.uid, userData.name);
-      toast.success('Parcela marcada como paga!');
+      if (amount === selectedInstallment.amount) {
+        await markInstallmentAsPaid(selectedAccount.id, selectedInstallment.installmentNumber, 'dinheiro', userData.uid, userData.name);
+        toast.success('Parcela marcada como paga!');
+      } else {
+        const result = await processPartialPaymentAccountPayable(
+          selectedAccount.id,
+          selectedInstallment.installmentNumber,
+          amount,
+          'dinheiro',
+          userData.uid,
+          userData.name
+        );
+
+        if (result.createdNewInstallment) {
+          toast.success(`Pagamento parcial registrado. Saldo de ${formatCurrency(result.remainingAmount)} foi criado em uma nova parcela.`);
+        } else {
+          toast.success(`Pagamento parcial registrado. Saldo de ${formatCurrency(result.remainingAmount)} foi adicionado à próxima parcela.`);
+        }
+      }
+
+      setPaymentDialogOpen(false);
+      setSelectedAccount(null);
+      setSelectedInstallment(null);
+      setPaidAmount('');
       await loadAccounts();
     } catch (error: any) {
-      console.error('Error marking as paid:', error);
-      toast.error(error.message || 'Erro ao marcar como paga');
+      console.error('Error processing payment:', error);
+      toast.error(error.message || 'Erro ao registrar pagamento');
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -447,10 +494,10 @@ export default function AccountsPayable() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleMarkAsPaid(account.id, inst.installmentNumber)}
+                                onClick={() => handleOpenPaymentDialog(account, inst)}
                                 className="h-6 px-2 text-xs bg-green-500/20 border-green-500/30 text-green-300 hover:bg-green-500/30"
                               >
-                                <Check className="w-3 h-3" />
+                                <DollarSign className="w-3 h-3" />
                               </Button>
                             ) : (
                               <div className="flex flex-col items-end">
@@ -632,6 +679,79 @@ export default function AccountsPayable() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {selectedInstallment && (
+          <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+            <DialogContent className="backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-bold text-white">
+                  Registrar Pagamento - Parcela {selectedInstallment.installmentNumber}
+                </DialogTitle>
+                <DialogDescription className="text-white/70">
+                  Informe o valor pago. Se for menor que o valor da parcela, o saldo restante será jogado para a próxima parcela ou criará uma nova se esta for a última.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                  <p className="text-white/70 text-sm mb-1">Valor da Parcela</p>
+                  <p className="text-white text-2xl font-bold">
+                    {formatCurrency(selectedInstallment.amount)}
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="text-white">Valor Pago *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={selectedInstallment.amount}
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    className="bg-white/10 border-white/20 text-white"
+                    placeholder="0.00"
+                  />
+                  <p className="text-white/50 text-sm mt-2">
+                    Se o valor for menor que a parcela, o saldo será adicionado automaticamente à próxima parcela. Na última parcela, uma nova será criada.
+                  </p>
+                </div>
+
+                {parseFloat(paidAmount || '0') > 0 && parseFloat(paidAmount || '0') < selectedInstallment.amount && (
+                  <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                    <p className="text-yellow-300 text-sm font-medium">⚠️ Pagamento Parcial</p>
+                    <p className="text-yellow-200 text-sm mt-1">
+                      Saldo de {formatCurrency(selectedInstallment.amount - parseFloat(paidAmount || '0'))} será transferido automaticamente.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPaymentDialogOpen(false);
+                      setSelectedAccount(null);
+                      setSelectedInstallment(null);
+                      setPaidAmount('');
+                    }}
+                    className="flex-1 bg-white/5 border-white/20 text-white hover:bg-white/10"
+                    disabled={processing}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleProcessPayment}
+                    disabled={processing || !paidAmount || parseFloat(paidAmount) <= 0}
+                    className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                  >
+                    {processing ? 'Processando...' : 'Confirmar Pagamento'}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
 
         {/* Dialog de Exportar Contas Pagas */}
         <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>

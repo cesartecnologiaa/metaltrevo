@@ -46,9 +46,12 @@ export default function PDV() {
   const { userData } = useAuthContext();
   const { printRef, printReceipt } = usePrintReceipt();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const clientSearchInputRef = useRef<HTMLInputElement>(null);
+  const discountInputRef = useRef<HTMLInputElement>(null);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [selectedCartItemId, setSelectedCartItemId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'dinheiro' | 'cartao_credito' | 'cartao_debito' | 'pix' | 'boleto'>('dinheiro');
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -95,6 +98,95 @@ export default function PDV() {
       setCheckingCash(false);
     }
   };
+
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      const isTyping = tag === 'input' || tag === 'textarea' || target?.isContentEditable;
+
+      if (event.key === 'Escape') {
+        if (productSearch) {
+          event.preventDefault();
+          setProductSearch('');
+          searchInputRef.current?.focus();
+          return;
+        }
+        if (clientSearch) {
+          event.preventDefault();
+          setClientSearch('');
+          clientSearchInputRef.current?.focus();
+          return;
+        }
+      }
+
+      if (event.key === 'F2') {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      if (event.key === 'F3') {
+        event.preventDefault();
+        clientSearchInputRef.current?.focus();
+        clientSearchInputRef.current?.select();
+        return;
+      }
+
+      if (event.key === 'F4') {
+        event.preventDefault();
+        setPaymentMethod('dinheiro');
+        return;
+      }
+
+      if (event.key === 'F5' && !isTyping) {
+        event.preventDefault();
+        if (!processing && cart.length > 0 && cashRegisterOpen) {
+          finalizeSale();
+        }
+        return;
+      }
+
+      if (event.key === 'F6') {
+        event.preventDefault();
+        discountInputRef.current?.focus();
+        discountInputRef.current?.select();
+        return;
+      }
+
+      if (event.key === 'F8' && !isTyping) {
+        event.preventDefault();
+        if (cart.length > 0) clearCart();
+        return;
+      }
+
+      if (event.ctrlKey && event.key === 'Delete' && !isTyping) {
+        event.preventDefault();
+        if (selectedCartItemId) {
+          removeFromCart(selectedCartItemId);
+        }
+        return;
+      }
+
+      if (event.ctrlKey && (event.key === '+' || event.key === '=' ) && !isTyping) {
+        event.preventDefault();
+        const selectedItem = cart.find(item => item.id === selectedCartItemId);
+        if (selectedItem) updateQuantity(selectedItem.id, selectedItem.quantity + 1);
+        return;
+      }
+
+      if (event.ctrlKey && event.key === '-' && !isTyping) {
+        event.preventDefault();
+        const selectedItem = cart.find(item => item.id === selectedCartItemId);
+        if (selectedItem) updateQuantity(selectedItem.id, selectedItem.quantity - 1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [productSearch, clientSearch, processing, cart, cashRegisterOpen, selectedCartItemId, discount]);
 
   // Recalcular preços do carrinho quando forma de pagamento ou parcelas mudam
   useEffect(() => {
@@ -190,6 +282,7 @@ export default function PDV() {
         toast.error(`Estoque insuficiente! Disponível: ${product.currentStock}`);
         return;
       }
+      setSelectedCartItemId(product.id);
       updateQuantity(product.id, existingItem.quantity + 1);
     } else {
       // Verificar se há estoque
@@ -209,6 +302,7 @@ export default function PDV() {
         availableStock: product.currentStock,
       };
       setCart([...cart, newItem]);
+      setSelectedCartItemId(product.id);
       toast.success(`${product.name} adicionado ao carrinho`);
     }
   };
@@ -234,11 +328,15 @@ export default function PDV() {
 
   const removeFromCart = (id: string) => {
     setCart(cart.filter(item => item.id !== id));
+    if (selectedCartItemId === id) {
+      setSelectedCartItemId(null);
+    }
     toast.info('Item removido do carrinho');
   };
 
   const clearCart = () => {
     setCart([]);
+    setSelectedCartItemId(null);
     setSelectedClient(null);
     setDeliveryType('balcao');
       setDeliveryAddress('');
@@ -419,11 +517,53 @@ export default function PDV() {
 
   return (
     <Layout>
-      <div className="space-y-4">
+      <div className="space-y-4 pb-28 lg:pb-6">
         {/* Header */}
         <div>
           <h1 className="text-4xl font-bold text-white mb-2">PDV - Ponto de Venda</h1>
           <p className="text-white/70">Realize vendas de forma rápida e eficiente</p>
+          <p className="text-white/40 text-sm mt-2">Atalhos: F2 produto, F3 cliente, F4 dinheiro, F5 finalizar, F6 desconto, F8 limpar, Ctrl+Del remover item</p>
+        </div>
+
+        <div className="fixed bottom-4 right-4 z-40 hidden xl:block">
+          <Card className="backdrop-blur-2xl bg-zinc-950/80 border-white/10 shadow-2xl w-[320px]">
+            <div className="p-4 space-y-3">
+              <div>
+                <p className="text-white font-semibold text-sm">Atalhos do PDV</p>
+                <p className="text-white/50 text-xs">Use o teclado para agilizar o atendimento</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {[
+                  ['F2', 'Buscar produto'],
+                  ['F3', 'Buscar cliente'],
+                  ['F4', 'Dinheiro'],
+                  ['F5', 'Finalizar venda'],
+                  ['F6', 'Desconto'],
+                  ['F8', 'Limpar carrinho'],
+                  ['Ctrl + Del', 'Remover item'],
+                  ['Ctrl + + / -', 'Qtd. item'],
+                ].map(([shortcut, label]) => (
+                  <div key={shortcut} className="col-span-2 flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                    <span className="text-white/70">{label}</span>
+                    <span className="rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 font-semibold text-cyan-200">
+                      {shortcut}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <div className="fixed inset-x-3 bottom-3 z-40 xl:hidden">
+          <Card className="backdrop-blur-2xl bg-zinc-950/85 border-white/10 shadow-2xl">
+            <div className="p-3">
+              <p className="text-white/80 text-[11px] leading-relaxed">
+                <span className="font-semibold text-white">Atalhos:</span> F2 produto • F3 cliente • F4 dinheiro • F5 finalizar • F6 desconto • F8 limpar
+              </p>
+            </div>
+          </Card>
         </div>
 
         {/* Alerta de Caixa Fechado */}
@@ -461,6 +601,7 @@ export default function PDV() {
             <div className="relative">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-white/40" />
               <Input
+                ref={clientSearchInputRef}
                 placeholder="Buscar por código ou nome..."
                 value={clientSearch}
                 onChange={(e) => setClientSearch(e.target.value)}
@@ -621,7 +762,8 @@ export default function PDV() {
                 {cart.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/10"
+                    onClick={() => setSelectedCartItemId(item.id)}
+                    className={`flex items-center justify-between p-2 rounded-lg border transition-colors cursor-pointer ${selectedCartItemId === item.id ? 'bg-blue-500/15 border-blue-400/40' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
                   >
                     <div className="flex-1 min-w-0">
                       <h3 className="text-white font-semibold text-sm truncate">{item.name}</h3>
@@ -882,6 +1024,7 @@ export default function PDV() {
                 <div>
                   <Label className="text-white mb-2 block">Desconto (R$)</Label>
                   <Input
+                    ref={discountInputRef}
                     type="number"
                     step="0.01"
                     min="0"
