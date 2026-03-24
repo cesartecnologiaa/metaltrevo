@@ -192,14 +192,14 @@ export default function Layout({ children }: LayoutProps) {
       icon: DollarSign,
       label: 'Contas a Receber',
       path: '/contas-receber',
-      show: permissions.isAdmin,
+      show: permissions.canViewAccountsReceivable,
       badge: receivablesDueTodayCount > 0 ? receivablesDueTodayCount : undefined,
     },
     {
       icon: DollarSign,
       label: 'Contas a Pagar',
       path: '/contas-pagar',
-      show: permissions.isAdmin,
+      show: permissions.canViewAccountsPayable,
       badge: upcomingDuesCount > 0 ? upcomingDuesCount : undefined,
     },
     {
