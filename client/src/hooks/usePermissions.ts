@@ -13,6 +13,7 @@ export interface Permissions {
   canViewStock: boolean;
   canViewClients: boolean;
   canViewAccountsReceivable: boolean;
+  canViewAccountsPayable: boolean;
   canViewDeposito: boolean;
   
   // Relatórios e Dashboard
@@ -47,35 +48,29 @@ export function usePermissions(): Permissions {
   const isDeposito = role === 'deposito';
 
   return {
-    // Gestão de Usuários - APENAS ADMIN
     canCreateUsers: isAdmin,
-    
-    // Vendas - ADMIN, VENDEDOR e CAIXA
+
     canMakeSales: isAdmin || isVendedor || isCaixa,
     canEditSales: isAdmin || isVendedor,
     canCancelSales: isAdmin || isVendedor,
-    
-    // Consultas
+
     canViewStock: isAdmin || isVendedor,
     canViewClients: isAdmin || isVendedor,
     canViewAccountsReceivable: isAdmin || isVendedor,
+    canViewAccountsPayable: isAdmin || isVendedor,
     canViewDeposito: isAdmin || isVendedor || isDeposito,
-    
-    // Relatórios e Dashboard - APENAS ADMIN
+
     canViewDashboard: isAdmin,
-    canViewReports: isAdmin,
+    canViewReports: isAdmin || isVendedor,
     canExportFinancialData: isAdmin,
     canViewSalesRevenueCard: isAdmin,
-    
-    // Gestão de Produtos - APENAS ADMIN
+
     canManageProducts: isAdmin,
     canManageCategories: isAdmin,
     canManageSuppliers: isAdmin,
-    
-    // Depósito - ADMIN e DEPÓSITO
+
     canManageWithdrawals: isAdmin || isDeposito,
-    
-    // Role info
+
     role,
     isAdmin,
     isVendedor,
