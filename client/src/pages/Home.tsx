@@ -28,7 +28,7 @@ import { Redirect } from 'wouter';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 
 function getSaleReceivedAmount(sale: any) {
-  const total = Number(sale?.total || 0);
+  const total = Number(sale?.total ?? sale?.totalAmount ?? 0);
   const paymentMethod = String(sale?.paymentMethod || '').toLowerCase();
   const entryAmount = Number(
     sale?.entryAmount ??
@@ -37,8 +37,6 @@ function getSaleReceivedAmount(sale: any) {
     0
   );
 
-  // boleto mensal não entra inteiro no faturamento do dia
-  // só entra a entrada, se houver
   if (paymentMethod === 'boleto') {
     return Math.max(entryAmount, 0);
   }
@@ -46,9 +44,20 @@ function getSaleReceivedAmount(sale: any) {
   return total;
 }
 
+function getSaleGrossAmount(sale: any) {
+  return Number(sale?.total ?? sale?.totalAmount ?? 0);
+}
+
+function isSameDay(dateA: Date, dateB: Date) {
+  return (
+    dateA.getFullYear() === dateB.getFullYear() &&
+    dateA.getMonth() === dateB.getMonth() &&
+    dateA.getDate() === dateB.getDate()
+  );
+}
+
 export default function Home() {
   const permissions = usePermissions();
-
   const [stats, setStats] = useState({
     todaySales: 0,
     todayRevenue: 0,
@@ -58,7 +67,6 @@ export default function Home() {
     totalClients: 0,
     totalProducts: 0,
   });
-
   const [salesData, setSalesData] = useState<any[]>([]);
   const [revenueData, setRevenueData] = useState<any[]>([]);
   const [sellerData, setSellerData] = useState<any[]>([]);
@@ -98,10 +106,10 @@ export default function Home() {
       const today = new Date();
       const todayStart = startOfDay(today);
       const todayEnd = endOfDay(today);
-      const yesterdayStart = startOfDay(subDays(today, 1));
-      const yesterdayEnd = endOfDay(subDays(today, 1));
+      const yesterday = subDays(today, 1);
+      const yesterdayStart = startOfDay(yesterday);
+      const yesterdayEnd = endOfDay(yesterday);
 
-      // Vendas de hoje
       const todaySalesQuery = query(
         collection(db, 'sales'),
         where('createdAt', '>=', Timestamp.fromDate(todayStart)),
@@ -113,20 +121,21 @@ export default function Home() {
         .filter((data: any) => data.status === 'concluida');
 
       const todaySalesCount = todaySalesFiltered.length;
-
       const todaySalesRevenue = todaySalesFiltered.reduce((sum, sale: any) => {
         return sum + getSaleReceivedAmount(sale);
       }, 0);
 
-      // Baixas de contas a receber feitas hoje
-      const todayReceivablePayments = await getTodayReceivablePayments();
-      const todayReceivablesRevenue = todayReceivablePayments.reduce((sum, payment) => {
-        return sum + Number(payment.paidAmount || 0);
-      }, 0);
+      const receivablePayments = await getTodayReceivablePayments();
+
+      const todayReceivablesRevenue = receivablePayments
+        .filter(payment => {
+          const paidAt = payment.paidAt?.toDate?.() || new Date(payment.paidAt);
+          return isSameDay(paidAt, today);
+        })
+        .reduce((sum, payment) => sum + Number(payment.paidAmount || 0), 0);
 
       const todayRevenueTotal = Number((todaySalesRevenue + todayReceivablesRevenue).toFixed(2));
 
-      // Vendas de ontem
       const yesterdaySalesQuery = query(
         collection(db, 'sales'),
         where('createdAt', '>=', Timestamp.fromDate(yesterdayStart)),
@@ -138,23 +147,19 @@ export default function Home() {
         .filter((data: any) => data.status === 'concluida');
 
       const yesterdaySalesCount = yesterdaySalesFiltered.length;
-
       const yesterdaySalesRevenue = yesterdaySalesFiltered.reduce((sum, sale: any) => {
         return sum + getSaleReceivedAmount(sale);
       }, 0);
 
-      // Baixas de contas a receber de ontem
-      const allReceivablePayments = await getTodayReceivablePayments();
-      const yesterdayReceivablesRevenue = allReceivablePayments
+      const yesterdayReceivablesRevenue = receivablePayments
         .filter(payment => {
           const paidAt = payment.paidAt?.toDate?.() || new Date(payment.paidAt);
-          return paidAt >= yesterdayStart && paidAt <= yesterdayEnd;
+          return isSameDay(paidAt, yesterday);
         })
         .reduce((sum, payment) => sum + Number(payment.paidAmount || 0), 0);
 
       const yesterdayRevenueTotal = Number((yesterdaySalesRevenue + yesterdayReceivablesRevenue).toFixed(2));
 
-      // Produtos com estoque baixo
       const productsSnapshot = await getDocs(collection(db, 'products'));
       const lowStock = productsSnapshot.docs
         .filter(doc => {
@@ -168,11 +173,9 @@ export default function Home() {
 
       const lowStockCount = lowStock.length;
 
-      // Total de clientes
       const clientsSnapshot = await getDocs(collection(db, 'clients'));
       const totalClientsCount = clientsSnapshot.size;
 
-      // Total de produtos
       const totalProductsCount = productsSnapshot.size;
 
       setStats({
@@ -187,9 +190,8 @@ export default function Home() {
 
       setLowStockProducts(lowStock);
 
-      await loadChartData();
+      await loadChartData(receivablePayments);
       await loadSellerData();
-
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -197,9 +199,9 @@ export default function Home() {
     }
   };
 
-  const loadChartData = async () => {
+  const loadChartData = async (receivablePaymentsInput?: any[]) => {
     try {
-      const last7Days = [];
+      const last7Days: string[] = [];
       const salesByDay: any = {};
       const revenueByDay: any = {};
 
@@ -234,8 +236,7 @@ export default function Home() {
         }
       });
 
-      // Somar baixas de contas a receber nos últimos 7 dias ao faturamento do gráfico
-      const receivablePayments = await getTodayReceivablePayments();
+      const receivablePayments = receivablePaymentsInput || await getTodayReceivablePayments();
       receivablePayments.forEach(payment => {
         const paidDate = payment.paidAt?.toDate?.() || new Date(payment.paidAt);
         const dateKey = format(paidDate, 'dd/MM');
@@ -271,7 +272,11 @@ export default function Home() {
 
       salesSnapshot.docs.forEach(doc => {
         const data = doc.data();
-        const sellerName = data.sellerName || data.createdByName || data.userName || 'Vendedor Desconhecido';
+        const sellerName =
+          data.sellerName ||
+          data.createdByName ||
+          data.userName ||
+          'Vendedor Desconhecido';
 
         if (data.status === 'concluida') {
           if (!sellerStats[sellerName]) {
@@ -281,13 +286,17 @@ export default function Home() {
               faturamento: 0,
             };
           }
-
           sellerStats[sellerName].vendas++;
-          sellerStats[sellerName].faturamento += getSaleReceivedAmount(data);
+          sellerStats[sellerName].faturamento += getSaleGrossAmount(data);
         }
       });
 
       const sellersArray = Object.values(sellerStats)
+        .map((item: any) => ({
+          ...item,
+          faturamento: Number(item.faturamento || 0),
+          vendas: Number(item.vendas || 0),
+        }))
         .sort((a: any, b: any) => b.faturamento - a.faturamento);
 
       setSellerData(sellersArray);
