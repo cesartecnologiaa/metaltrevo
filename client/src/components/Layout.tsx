@@ -155,7 +155,7 @@ export default function Layout({ children }: LayoutProps) {
       icon: Package,
       label: 'Depósito',
       path: '/deposito',
-      show: permissions.isAdmin || userData?.role === 'deposito',
+      show: permissions.canViewDeposito,
     },
     // CADASTROS (ABAIXO)
     {

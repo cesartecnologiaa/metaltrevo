@@ -73,7 +73,7 @@ function AppRoutes() {
       </Route>
 
       <Route path="/produtos">
-        <ProtectedRoute allowedRoles={['admin']}>
+        <ProtectedRoute allowedRoles={['admin', 'vendedor']}>
           <Products />
         </ProtectedRoute>
       </Route>
@@ -121,7 +121,7 @@ function AppRoutes() {
       </Route>
 
       <Route path="/deposito">
-        <ProtectedRoute allowedRoles={['admin', 'deposito']}>
+        <ProtectedRoute allowedRoles={['admin', 'vendedor', 'deposito']}>
           <DepositoPage />
         </ProtectedRoute>
       </Route>
