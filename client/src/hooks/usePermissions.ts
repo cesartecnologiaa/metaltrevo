@@ -12,11 +12,14 @@ export interface Permissions {
   // Consultas
   canViewStock: boolean;
   canViewClients: boolean;
+  canViewAccountsReceivable: boolean;
+  canViewDeposito: boolean;
   
   // Relatórios e Dashboard
   canViewDashboard: boolean;
   canViewReports: boolean;
   canExportFinancialData: boolean;
+  canViewSalesRevenueCard: boolean;
   
   // Gestão de Produtos
   canManageProducts: boolean;
@@ -47,19 +50,22 @@ export function usePermissions(): Permissions {
     // Gestão de Usuários - APENAS ADMIN
     canCreateUsers: isAdmin,
     
-    // Vendas - ADMIN e VENDEDOR
+    // Vendas - ADMIN, VENDEDOR e CAIXA
     canMakeSales: isAdmin || isVendedor || isCaixa,
     canEditSales: isAdmin || isVendedor,
     canCancelSales: isAdmin || isVendedor,
     
-    // Consultas - ADMIN e VENDEDOR
+    // Consultas
     canViewStock: isAdmin || isVendedor,
     canViewClients: isAdmin || isVendedor,
+    canViewAccountsReceivable: isAdmin || isVendedor,
+    canViewDeposito: isAdmin || isVendedor || isDeposito,
     
     // Relatórios e Dashboard - APENAS ADMIN
     canViewDashboard: isAdmin,
     canViewReports: isAdmin,
     canExportFinancialData: isAdmin,
+    canViewSalesRevenueCard: isAdmin,
     
     // Gestão de Produtos - APENAS ADMIN
     canManageProducts: isAdmin,

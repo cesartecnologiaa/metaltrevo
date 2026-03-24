@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Search, Eye, XCircle, Printer, Calendar, DollarSign, User, Filter, FileText, FileSpreadsheet, Truck } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Eye, XCircle, Printer, DollarSign, FileText, FileSpreadsheet, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import { exportSalesToPDF, exportSalesToExcel } from '@/lib/exportUtils';
 import { Sale, SaleStatus, PaymentMethod } from '@/types';
 import { getSales, cancelSale } from '@/services/salesService';
 import { useAuthContext } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import { formatCpfCnpj } from '@/lib/validators';
 import { safeToDate, formatDateTime } from '@/lib/firestoreUtils';
 import { formatCurrency } from '@/lib/formatters';
@@ -20,6 +21,8 @@ import { usePrintReceipt } from '@/hooks/usePrintReceipt';
 
 export default function Sales() {
   const { userData } = useAuthContext();
+  const permissions = usePermissions();
+
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -183,7 +186,8 @@ export default function Sales() {
   const formatDate = (date: any) => {
     if (!date) return '';
     try {
-      const d = date.toDate ? date.toDate() : new Date(date);
+      const d = safeToDate(date);
+      if (!d || isNaN(d.getTime())) return '';
       return d.toLocaleDateString('pt-BR', {
         day: '2-digit',
         month: '2-digit',
@@ -191,12 +195,22 @@ export default function Sales() {
         hour: '2-digit',
         minute: '2-digit',
       });
-    } catch (error) {
+    } catch {
       return '';
     }
   };
 
-  // Filtros
+  const getSafeCancellationText = (sale: Sale) => {
+    const cancelledBy = sale.cancellation?.cancelledByName || 'Usuário';
+    const cancelledDate = sale.cancellation?.cancelledAt ? safeToDate(sale.cancellation.cancelledAt) : null;
+
+    if (!cancelledDate || isNaN(cancelledDate.getTime())) {
+      return `Cancelado por ${cancelledBy} em Data não disponível`;
+    }
+
+    return `Cancelado por ${cancelledBy} em ${formatDateTime(cancelledDate)}`;
+  };
+
   const filteredSales = sales.filter(sale => {
     const matchesSearch = 
       sale.saleNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -218,17 +232,16 @@ export default function Sales() {
           endDate.setHours(23, 59, 59, 999);
           if (saleDate > endDate) matchesDate = false;
         }
-      } catch (error) {
-        // Ignore date parse errors
+      } catch {
+        // ignore
       }
     }
 
     return matchesSearch && matchesStatus && matchesPayment && matchesDate;
   });
 
-  // Estatísticas
   const stats = {
-    total: filteredSales.filter(s => s.status !== 'cancelada').length, // Excluir canceladas do total
+    total: filteredSales.filter(s => s.status !== 'cancelada').length,
     completed: filteredSales.filter(s => s.status === 'concluida').length,
     cancelled: filteredSales.filter(s => s.status === 'cancelada').length,
     totalRevenue: filteredSales
@@ -238,7 +251,6 @@ export default function Sales() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Gestão de Vendas</h1>
@@ -264,8 +276,7 @@ export default function Sales() {
         </div>
       </div>
 
-      {/* Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 ${permissions.canViewSalesRevenueCard ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
         <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-lg bg-blue-500/20">
@@ -302,22 +313,23 @@ export default function Sales() {
           </div>
         </Card>
 
-        <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-lg bg-blue-500/20">
-              <DollarSign className="w-6 h-6 text-blue-400" />
+        {permissions.canViewSalesRevenueCard && (
+          <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-lg bg-blue-500/20">
+                <DollarSign className="w-6 h-6 text-blue-400" />
+              </div>
+              <div>
+                <p className="text-white/70 text-sm">Faturamento</p>
+                <p className="text-green-400 font-bold text-xl">
+                  R$ {formatCurrency(stats.totalRevenue)}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-white/70 text-sm">Faturamento</p>
-              <p className="text-green-400 font-bold text-xl">
-                R$ {formatCurrency(stats.totalRevenue)}
-              </p>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        )}
       </div>
 
-      {/* Filtros */}
       <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-6">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="md:col-span-2">
@@ -386,7 +398,6 @@ export default function Sales() {
         </div>
       </Card>
 
-      {/* Lista de Vendas */}
       {loading ? (
         <div className="text-center py-12 text-white/70">
           Carregando vendas...
@@ -491,13 +502,12 @@ export default function Sales() {
                         <strong>Motivo:</strong> {sale.cancellation.reason}
                       </p>
                       <p className="text-white/50 text-xs mt-1">
-                        Cancelado por {sale.cancellation.cancelledByName} em {formatDate(sale.cancellation.cancelledAt)}
+                        {getSafeCancellationText(sale)}
                       </p>
                     </div>
                   )}
                 </div>
 
-                {/* Ações */}
                 <div className="flex gap-2 ml-4">
                   <Button
                     onClick={() => handleViewDetails(sale)}
@@ -546,7 +556,6 @@ export default function Sales() {
         </div>
       )}
 
-      {/* Dialog de Detalhes */}
       {selectedSale && (
         <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
           <DialogContent className="max-w-2xl backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20 max-h-[90vh] overflow-y-auto">
@@ -560,7 +569,6 @@ export default function Sales() {
             </DialogHeader>
 
             <div className="space-y-4">
-              {/* Informações Gerais */}
               <div>
                 <h3 className="text-white font-semibold mb-3">Informações Gerais</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -594,7 +602,6 @@ export default function Sales() {
                 </div>
               </div>
 
-              {/* Itens */}
               <div>
                 <h3 className="text-white font-semibold mb-3">Itens da Venda</h3>
                 <div className="space-y-2">
@@ -615,7 +622,6 @@ export default function Sales() {
                 </div>
               </div>
 
-              {/* Totais */}
               <div className="border-t border-white/20 pt-4">
                 <div className="space-y-2">
                   <div className="flex justify-between text-white/70">
@@ -646,7 +652,6 @@ export default function Sales() {
         </Dialog>
       )}
 
-      {/* Dialog de Cancelamento */}
       {selectedSale && (
         <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
           <DialogContent className="max-w-md backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
@@ -698,7 +703,6 @@ export default function Sales() {
         </Dialog>
       )}
 
-      {/* Dialog de Status de Entrega */}
       {selectedSale && (
         <Dialog open={deliveryStatusDialogOpen} onOpenChange={setDeliveryStatusDialogOpen}>
           <DialogContent className="backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20">
@@ -753,7 +757,6 @@ export default function Sales() {
         </Dialog>
       )}
 
-      {/* Modal de Reimpressao - Tela Cheia */}
       {reprintDialogOpen && selectedSale && (
         <div className="fixed inset-0 z-50 bg-black/50 flex flex-col">
           <div className="bg-gradient-to-br from-blue-900 via-blue-800 to-cyan-800 border-b border-white/20 p-4 flex items-center justify-between">
@@ -785,7 +788,6 @@ export default function Sales() {
         </div>
       )}
 
-      {/* Componente de impressão oculto */}
       {selectedSale && !reprintDialogOpen && (
         <div ref={printRef} className="hidden">
           <SaleReceipt sale={selectedSale} />
