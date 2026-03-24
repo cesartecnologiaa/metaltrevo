@@ -115,13 +115,13 @@ function AppRoutes() {
       </Route>
 
       <Route path="/contas-receber">
-        <ProtectedRoute allowedRoles={['admin']}>
+        <ProtectedRoute allowedRoles={['admin', 'vendedor']}>
           <AccountsReceivable />
         </ProtectedRoute>
       </Route>
 
       <Route path="/deposito">
-        <ProtectedRoute allowedRoles={['admin', 'deposito', 'vendedor']}>
+        <ProtectedRoute allowedRoles={['admin', 'deposito']}>
           <DepositoPage />
         </ProtectedRoute>
       </Route>
