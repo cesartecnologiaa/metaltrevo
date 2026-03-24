@@ -165,12 +165,18 @@ export function SellerPerformanceChart({ data }: { data: SellerChartItem[] }) {
         ) : (
           <div className="h-[360px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
+              <BarChart
+                data={data}
+                margin={{ top: 10, right: 20, left: 0, bottom: 20 }}
+                barCategoryGap="45%"
+                barGap={8}
+              >
                 <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
                 <XAxis
                   dataKey="vendedor"
                   stroke="rgba(255,255,255,0.6)"
                   tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 12 }}
+                  interval={0}
                 />
                 <YAxis
                   stroke="rgba(255,255,255,0.6)"
@@ -191,7 +197,13 @@ export function SellerPerformanceChart({ data }: { data: SellerChartItem[] }) {
                   }}
                 />
                 <Legend />
-                <Bar dataKey="faturamento" name="faturamento" fill="#a855f7" radius={[6, 6, 0, 0]} />
+                <Bar
+                  dataKey="faturamento"
+                  name="Faturamento"
+                  fill="#a855f7"
+                  radius={[8, 8, 0, 0]}
+                  maxBarSize={90}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
