@@ -59,7 +59,7 @@ const COLLECTIONS: Record<ActionKey, { title: string; description: string; colle
   },
 };
 
-const IMPORT_COLLECTIONS = ['products', 'clients', 'accountsReceivable', 'accountsPayable', 'users'];
+const IMPORT_COLLECTIONS = ['products', 'clients', 'accountsReceivable', 'accountsPayable'];
 
 function chunk<T>(items: T[], size: number) {
   const out: T[][] = [];
@@ -207,7 +207,7 @@ export default function AdminTools() {
         { collectionName: 'clients', records: bundle.clients },
         { collectionName: 'accountsReceivable', records: bundle.accountsReceivable },
         { collectionName: 'accountsPayable', records: bundle.accountsPayable },
-        { collectionName: 'users', records: bundle.vendors },
+        
       ];
 
       let written = 0;
