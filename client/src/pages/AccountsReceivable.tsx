@@ -316,6 +316,17 @@ export default function AccountsReceivable() {
     ? roundMoney(typedPaymentAmount - currentInstallmentAmount)
     : 0;
 
+
+  const getDisplaySaleNumber = (account: any) => {
+    if (account?.legacyAccountCode) return account.legacyAccountCode;
+    if (account?.clientCode) return account.clientCode;
+
+    const saleNumber = String(account?.saleNumber || '');
+    return saleNumber.startsWith('LEGACY-')
+      ? saleNumber.replace(/^LEGACY-/, '')
+      : saleNumber;
+  };
+
   const filteredAccounts = useMemo(() => {
     let filtered = filterAccountsByDate(accounts);
     if (!searchTerm) return filtered;
@@ -323,7 +334,7 @@ export default function AccountsReceivable() {
     return filtered.filter(account => (
       account?.clientName?.toLowerCase().includes(search) ||
       account?.clientDocument?.replace(/[^\d]/g, '').includes(search.replace(/[^\d]/g, '')) ||
-      account?.saleNumber?.toLowerCase().includes(search)
+      getDisplaySaleNumber(account).toLowerCase().includes(search)
     ));
   }, [accounts, quickFilter, searchTerm]);
 
