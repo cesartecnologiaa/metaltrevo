@@ -277,7 +277,15 @@ export default function Clients() {
   }, [clients, searchTerm, filterStatus]);
 
   const visibleClients = useMemo(() => {
-    return filteredClients.slice(0, searchTerm.trim() ? 20 : 12);
+    if (searchTerm.trim()) return filteredClients;
+
+    const sorted = [...filteredClients].sort((a, b) => {
+      const dateA = (a as any)?.createdAt?.toDate?.() || new Date((a as any)?.createdAt || 0);
+      const dateB = (b as any)?.createdAt?.toDate?.() || new Date((b as any)?.createdAt || 0);
+      return dateB.getTime() - dateA.getTime();
+    });
+
+    return sorted.slice(0, 5);
   }, [filteredClients, searchTerm]);
 
   const visibleClientIdsKey = useMemo(() => {
@@ -434,6 +442,12 @@ export default function Clients() {
       </Card>
 
       {/* Lista de Clientes */}
+      {!loading && !searchTerm.trim() && filteredClients.length > 5 && (
+        <p className="text-white/60 text-sm">
+          Mostrando apenas os 5 clientes mais recentes. Use a busca para localizar os demais.
+        </p>
+      )}
+
       {loading ? (
         <div className="text-center py-12 text-white/70">
           Carregando clientes...
