@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Card } from '@/components/ui/card';
-import LowStockAlert from '@/components/LowStockAlert';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getUpcomingDueDates } from '@/services/accountsPayableService';
@@ -409,7 +408,27 @@ export default function Home() {
         </div>
 
         {lowStockProducts.length > 0 && (
-          <LowStockAlert products={lowStockProducts} />
+          <Card className="backdrop-blur-2xl bg-gradient-to-r from-orange-500/10 to-red-500/10 border-orange-500/30 shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
+                    <AlertTriangle className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-white text-lg font-bold">Produtos com Estoque Baixo</h3>
+                    <p className="text-white/70 text-sm">{lowStockProducts.length} produto(s) precisam de reposição</p>
+                  </div>
+                </div>
+                <a
+                  href="/produtos"
+                  className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors border border-white/20"
+                >
+                  Ver Produtos
+                </a>
+              </div>
+            </div>
+          </Card>
         )}
 
         {upcomingDues.length > 0 && (

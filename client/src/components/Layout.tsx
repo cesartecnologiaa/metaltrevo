@@ -116,7 +116,7 @@ export default function Layout({ children }: LayoutProps) {
       label: 'Dashboard',
       path: '/',
       show: permissions.canViewDashboard,
-      badge: lowStockCount > 0 ? lowStockCount : undefined,
+      badge: lowStockCount > 0,
     },
     // FUNCIONALIDADES ESSENCIAIS
     {
@@ -155,7 +155,7 @@ export default function Layout({ children }: LayoutProps) {
       icon: Package,
       label: 'Depósito',
       path: '/deposito',
-      show: permissions.canViewDeposito,
+      show: permissions.isAdmin || userData?.role === 'deposito',
     },
     // CADASTROS (ABAIXO)
     {
@@ -192,15 +192,15 @@ export default function Layout({ children }: LayoutProps) {
       icon: DollarSign,
       label: 'Contas a Receber',
       path: '/contas-receber',
-      show: permissions.canViewAccountsReceivable,
-      badge: receivablesDueTodayCount > 0 ? receivablesDueTodayCount : undefined,
+      show: permissions.isAdmin,
+      badge: receivablesDueTodayCount > 0,
     },
     {
       icon: DollarSign,
       label: 'Contas a Pagar',
       path: '/contas-pagar',
-      show: permissions.canViewAccountsPayable,
-      badge: upcomingDuesCount > 0 ? upcomingDuesCount : undefined,
+      show: permissions.isAdmin,
+      badge: upcomingDuesCount > 0,
     },
     {
       icon: TrendingUp,
@@ -268,8 +268,9 @@ export default function Layout({ children }: LayoutProps) {
                     <Icon className="w-5 h-5" />
                     <span className="font-medium flex-1">{item.label}</span>
                     {(item as any).badge && (
-                      <span className="w-5 h-5 rounded-full bg-gradient-to-r from-orange-500 to-red-500 flex items-center justify-center text-xs font-bold text-white animate-pulse">
-                        {(item as any).badge}
+                      <span className="relative flex h-3 w-3 items-center justify-center">
+                        <span className="absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75 animate-ping"></span>
+                        <span className="relative inline-flex h-3 w-3 rounded-full bg-orange-400"></span>
                       </span>
                     )}
                   </div>
