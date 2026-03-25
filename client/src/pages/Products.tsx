@@ -26,6 +26,15 @@ import { Category } from '@/types';
 import { usePermissions } from '@/hooks/usePermissions';
 import Layout from '@/components/Layout';
 
+function normalizeText(value: string | undefined | null) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+
 export default function Products() {
   const permissions = usePermissions();
   const [products, setProducts] = useState<Product[]>([]);
@@ -58,13 +67,52 @@ export default function Products() {
     loadData();
   }, []);
 
-  const normalizeProduct = (product: any): Product & any => {
+
+  const resolveCategory = (product: any, availableCategories: Category[]) => {
+    const categoryById = new Map(availableCategories.map((category) => [category.id, category]));
+    const categoryByName = new Map(
+      availableCategories.map((category) => [normalizeText(category.name), category])
+    );
+
+    const existingCategory = product?.categoryId ? categoryById.get(product.categoryId) : null;
+    if (existingCategory) {
+      return {
+        categoryId: existingCategory.id,
+        categoryName: existingCategory.name,
+      };
+    }
+
+    const importedCategoryName =
+      product?.categoryName ||
+      product?.family ||
+      product?.category ||
+      '';
+
+    const matchedCategory = categoryByName.get(normalizeText(importedCategoryName));
+
+    if (matchedCategory) {
+      return {
+        categoryId: matchedCategory.id,
+        categoryName: matchedCategory.name,
+      };
+    }
+
+    return {
+      categoryId: resolvedCategory.categoryId || '',
+      categoryName: resolvedCategory.categoryName || '',
+    };
+  };
+
+
+  const normalizeProduct = (product: any, availableCategories: Category[] = categories): Product & any => {
     const currentStock = Number(product?.currentStock ?? product?.stock ?? 0);
     const minStock = Number(product?.minStock ?? product?.minimumStock ?? 0);
     const salePrice = Number(product?.salePrice ?? product?.cashPrice ?? product?.price ?? 0);
     const cashPrice = Number(product?.cashPrice ?? product?.salePrice ?? product?.price ?? 0);
     const creditPrice = Number(product?.creditPrice ?? product?.salePrice ?? product?.price ?? 0);
     const costPrice = Number(product?.costPrice ?? product?.purchasePrice ?? 0);
+
+    const resolvedCategory = resolveCategory(product, availableCategories);
 
     return {
       ...product,
@@ -90,7 +138,7 @@ export default function Products() {
         getAllProducts(),
         getAllCategories()
       ]);
-      const normalizedProducts = (productsData || []).map((product: any) => normalizeProduct(product));
+      const normalizedProducts = (productsData || []).map((product: any) => normalizeProduct(product, categoriesData));
       setProducts(normalizedProducts);
       setCategories(categoriesData);
     } catch (error) {
@@ -162,6 +210,10 @@ export default function Products() {
         imageUrl = await uploadProductImage(formData.imageFile);
       }
 
+      const selectedCategory = formData.categoryId
+        ? categories.find(c => c.id === formData.categoryId)
+        : undefined;
+
       const productData = {
         name: formData.name,
         code: formData.code,
@@ -172,10 +224,8 @@ export default function Products() {
         costPrice: Number(formData.costPrice),
         currentStock: Number(formData.stock),
         minStock: Number(formData.minStock),
-        categoryId: formData.categoryId || undefined,
-        categoryName: formData.categoryId
-          ? categories.find(c => c.id === formData.categoryId)?.name
-          : undefined,
+        categoryId: selectedCategory?.id || undefined,
+        categoryName: selectedCategory?.name || undefined,
         imageUrl,
         active: true,
       };
@@ -245,8 +295,10 @@ export default function Products() {
   });
 
   const visibleProducts = filteredProducts.filter(product => {
+    const resolvedCategory = resolveCategory(product, categories);
+
     const matchesCategory =
-      filterCategory === 'all' || product.categoryId === filterCategory;
+      filterCategory === 'all' || resolvedCategory.categoryId === filterCategory;
 
     const matchesStatus =
       filterStatus === 'all' ||
@@ -392,9 +444,9 @@ export default function Products() {
                     <p className="text-white/70 text-sm mb-3 line-clamp-2">{product.description}</p>
                   )}
 
-                  {product.categoryName && (
+                  {resolveCategory(product, categories).categoryName && (
                     <span className="inline-block px-2 py-1 rounded-md bg-blue-500/20 text-blue-300 text-xs mb-3">
-                      {product.categoryName}
+                      {resolveCategory(product, categories).categoryName}
                     </span>
                   )}
 

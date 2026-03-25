@@ -20,6 +20,14 @@ import {
 import { getAllProducts } from '@/services/productService';
 import Layout from '@/components/Layout';
 
+function normalizeText(value: string | undefined | null) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 export default function Categories() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [productCounts, setProductCounts] = useState<Record<string, number>>({});
@@ -50,12 +58,31 @@ export default function Categories() {
 
       setCategories(categoriesData);
 
+      const categoryById = new Map(categoriesData.map((category) => [category.id, category]));
+      const categoryIdByName = new Map(
+        categoriesData.map((category) => [normalizeText(category.name), category.id])
+      );
+
       const counts: Record<string, number> = {};
+
       productsData.forEach((product: any) => {
-        if (product.categoryId) {
-          counts[product.categoryId] = (counts[product.categoryId] || 0) + 1;
+        let resolvedCategoryId = product.categoryId;
+
+        if (!resolvedCategoryId) {
+          const importedCategoryName =
+            product.categoryName ||
+            product.family ||
+            product.category ||
+            '';
+
+          resolvedCategoryId = categoryIdByName.get(normalizeText(importedCategoryName));
+        }
+
+        if (resolvedCategoryId && categoryById.has(resolvedCategoryId)) {
+          counts[resolvedCategoryId] = (counts[resolvedCategoryId] || 0) + 1;
         }
       });
+
       setProductCounts(counts);
     } catch (error) {
       console.error('Error loading data:', error);
