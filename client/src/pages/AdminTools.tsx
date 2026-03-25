@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, RefreshCw, Trash2, Wallet, Banknote, Database, Upload, FileJson, Eraser } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Trash2, Wallet, Banknote, Database, Upload, FileJson, Eraser, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { collection, getDocs, deleteDoc, doc, writeBatch, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -10,14 +10,6 @@ import { useAuthContext } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type ActionKey = 'sales' | 'cash' | 'withdrawals' | 'payables' | 'receivables' | 'all';
-
-type LegacyDataBundle = {
-  products: any[];
-  clients: any[];
-  accountsReceivable: any[];
-  accountsPayable: any[];
-  vendors: any[];
-};
 
 const COLLECTIONS: Record<ActionKey, { title: string; description: string; collections: string[]; danger?: boolean; icon: any }> = {
   sales: {
@@ -51,15 +43,29 @@ const COLLECTIONS: Record<ActionKey, { title: string; description: string; colle
     icon: Wallet,
   },
   all: {
-    title: 'Apagar tudo do banco',
-    description: 'Deleta os principais dados do sistema: vendas, caixa, sangrias, contas a pagar/receber, clientes, produtos, categorias, fornecedores, cotações, usuários, estoque e configurações.',
-    collections: ['sales', 'cashRegisters', 'cashWithdrawals', 'accountsPayable', 'accountsReceivable', 'clients', 'products', 'categories', 'suppliers', 'quotations', 'stock_movements', 'users', 'settings'],
+    title: 'Apagar dados operacionais',
+    description: 'Deleta dados operacionais do sistema, mas preserva os usuários atuais para você não perder acesso.',
+    collections: [
+      'sales',
+      'cashRegisters',
+      'cashWithdrawals',
+      'accountsPayable',
+      'accountsReceivable',
+      'clients',
+      'products',
+      'categories',
+      'suppliers',
+      'quotations',
+      'stock_movements',
+      'settings',
+      'legacyVendors'
+    ],
     danger: true,
     icon: Database,
   },
 };
 
-const IMPORT_COLLECTIONS = ['products', 'clients', 'accountsReceivable', 'accountsPayable'];
+const IMPORT_COLLECTIONS = ['products', 'clients', 'accountsReceivable', 'accountsPayable', 'legacyVendors'];
 
 function chunk<T>(items: T[], size: number) {
   const out: T[][] = [];
@@ -71,7 +77,6 @@ function convertValue(value: any): any {
   if (Array.isArray(value)) return value.map(convertValue);
 
   if (value && typeof value === 'object') {
-    // já no formato Firestore-like?
     if (value.seconds !== undefined && value.nanoseconds !== undefined) {
       return new Timestamp(value.seconds, value.nanoseconds);
     }
@@ -110,6 +115,7 @@ export default function AdminTools() {
   const [receivablesFile, setReceivablesFile] = useState<File | null>(null);
   const [payablesFile, setPayablesFile] = useState<File | null>(null);
   const [vendorsFile, setVendorsFile] = useState<File | null>(null);
+  const [summaryFile, setSummaryFile] = useState<File | null>(null);
   const [clearBeforeImport, setClearBeforeImport] = useState(true);
 
   if (userData?.role !== 'admin') {
@@ -164,34 +170,28 @@ export default function AdminTools() {
     receivables: receivablesFile?.name || 'Nenhum arquivo',
     payables: payablesFile?.name || 'Nenhum arquivo',
     vendors: vendorsFile?.name || 'Nenhum arquivo',
-  }), [productsFile, clientsFile, receivablesFile, payablesFile, vendorsFile]);
+    summary: summaryFile?.name || 'Nenhum arquivo',
+  }), [productsFile, clientsFile, receivablesFile, payablesFile, vendorsFile, summaryFile]);
 
   const importLegacyData = async () => {
     try {
       setLoading(true);
 
-      const [products, clients, accountsReceivable, accountsPayable, vendors] = await Promise.all([
+      const [products, clients, accountsReceivable, accountsPayable, vendors, summary] = await Promise.all([
         readJsonFile(productsFile),
         readJsonFile(clientsFile),
         readJsonFile(receivablesFile),
         readJsonFile(payablesFile),
         readJsonFile(vendorsFile),
+        summaryFile ? summaryFile.text().then((txt) => JSON.parse(txt)) : Promise.resolve(null),
       ]);
 
-      const bundle: LegacyDataBundle = {
-        products,
-        clients,
-        accountsReceivable,
-        accountsPayable,
-        vendors,
-      };
-
       const totalRecords =
-        bundle.products.length +
-        bundle.clients.length +
-        bundle.accountsReceivable.length +
-        bundle.accountsPayable.length +
-        bundle.vendors.length;
+        products.length +
+        clients.length +
+        accountsReceivable.length +
+        accountsPayable.length +
+        vendors.length;
 
       if (totalRecords === 0) {
         toast.error('Nenhum JSON válido foi selecionado para importar.');
@@ -203,11 +203,11 @@ export default function AdminTools() {
       }
 
       const importMap: Array<{ collectionName: string; records: any[] }> = [
-        { collectionName: 'products', records: bundle.products },
-        { collectionName: 'clients', records: bundle.clients },
-        { collectionName: 'accountsReceivable', records: bundle.accountsReceivable },
-        { collectionName: 'accountsPayable', records: bundle.accountsPayable },
-        
+        { collectionName: 'products', records: products },
+        { collectionName: 'clients', records: clients },
+        { collectionName: 'accountsReceivable', records: accountsReceivable },
+        { collectionName: 'accountsPayable', records: accountsPayable },
+        { collectionName: 'legacyVendors', records: vendors },
       ];
 
       let written = 0;
@@ -234,7 +234,13 @@ export default function AdminTools() {
         }
       }
 
-      toast.success(`Importação concluída com sucesso. ${written} registro(s) importado(s).`);
+      if (summary) {
+        const batch = writeBatch(db);
+        batch.set(doc(db, 'settings', 'legacyImportSummary'), convertValue(summary));
+        await batch.commit();
+      }
+
+      toast.success(`Importação concluída com sucesso. ${written} registro(s) importado(s). Usuários atuais preservados.`);
     } catch (error) {
       console.error('Error importing legacy data:', error);
       toast.error('Erro ao importar os dados do legado.');
@@ -253,14 +259,14 @@ export default function AdminTools() {
           <p className="text-white/70">Gerenciamento, limpeza e importação de dados do sistema</p>
         </div>
 
-        <Card className="bg-red-500/10 border-red-500/30">
+        <Card className="bg-emerald-500/10 border-emerald-500/30">
           <CardContent className="p-6">
             <div className="flex items-start gap-4">
-              <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
+              <ShieldCheck className="w-6 h-6 text-emerald-400 flex-shrink-0 mt-1" />
               <div>
-                <h3 className="text-lg font-semibold text-red-400 mb-2">⚠️ Zona de Perigo</h3>
+                <h3 className="text-lg font-semibold text-emerald-400 mb-2">Proteção de acesso</h3>
                 <p className="text-white/80">
-                  As ações abaixo são <strong>irreversíveis</strong> e podem deletar permanentemente os dados do banco.
+                  Esta versão do importador <strong>não apaga a coleção users</strong>. Os vendedores do sistema legado são importados para <code className="text-emerald-300">legacyVendors</code>, preservando seu acesso atual ao sistema.
                 </p>
               </div>
             </div>
@@ -274,7 +280,7 @@ export default function AdminTools() {
               Importar dados do sistema legado
             </CardTitle>
             <CardDescription className="text-white/70">
-              Envie os arquivos JSON gerados da migração (`products.json`, `clients.json`, `accountsReceivable.json`, `accountsPayable.json`, `vendors.json`) e importe tudo para o Firestore.
+              Envie os arquivos JSON recuperados do sistema antigo. Produtos, clientes e cobranças serão importados para o Firestore. Os usuários atuais serão preservados.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -284,7 +290,8 @@ export default function AdminTools() {
                 ['Clientes (clients.json)', setClientsFile, importSummary.clients],
                 ['Contas a Receber (accountsReceivable.json)', setReceivablesFile, importSummary.receivables],
                 ['Contas a Pagar (accountsPayable.json)', setPayablesFile, importSummary.payables],
-                ['Vendedores/Usuários (vendors.json)', setVendorsFile, importSummary.vendors],
+                ['Vendedores (vendors.json)', setVendorsFile, importSummary.vendors],
+                ['Resumo (summary.json) - opcional', setSummaryFile, importSummary.summary],
               ].map(([label, setter, fileName]) => (
                 <div key={label as string} className="space-y-2">
                   <label className="block text-sm font-medium text-white">{label as string}</label>
@@ -311,7 +318,7 @@ export default function AdminTools() {
                 className="h-4 w-4"
               />
               <label htmlFor="clearBeforeImport" className="text-sm text-white/90">
-                Limpar antes as coleções de destino (`products`, `clients`, `accountsReceivable`, `accountsPayable`, `users`)
+                Limpar antes as coleções de destino (<code>products</code>, <code>clients</code>, <code>accountsReceivable</code>, <code>accountsPayable</code>, <code>legacyVendors</code>)
               </label>
             </div>
 
@@ -343,6 +350,7 @@ export default function AdminTools() {
                   setReceivablesFile(null);
                   setPayablesFile(null);
                   setVendorsFile(null);
+                  setSummaryFile(null);
                 }}
                 className="border-white/20 text-white hover:bg-white/10"
               >
@@ -352,12 +360,27 @@ export default function AdminTools() {
             </div>
 
             <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-white/70">
-              <p className="font-semibold text-white mb-2">Observações</p>
+              <p className="font-semibold text-white mb-2">Como esta importação funciona</p>
               <ul className="space-y-1 list-disc ml-5">
-                <li>Os arquivos devem ser os JSONs já gerados da migração do banco legado.</li>
-                <li>Se marcar a opção de limpar antes, os dados atuais dessas coleções serão removidos.</li>
-                <li>Os registros são gravados preservando o campo `id` do JSON como ID do documento no Firestore.</li>
+                <li>Produtos serão importados com estoque, preço de compra, preço de venda e código.</li>
+                <li>Clientes serão importados com nome, documento, telefone e saldo legado.</li>
+                <li>Contas a receber em aberto serão importadas para <code>accountsReceivable</code>. Os 351 registros recuperados mostram cada cobrança como pendente com saldo atual. </li>
+                <li>Os vendedores recuperados serão importados em <code>legacyVendors</code>, preservando os usuários atuais.</li>
               </ul>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-red-500/10 border-red-500/30">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="text-lg font-semibold text-red-400 mb-2">⚠️ Zona de Perigo</h3>
+                <p className="text-white/80">
+                  As ações abaixo são <strong>irreversíveis</strong>. Esta versão preserva seus usuários atuais, mas pode apagar dados operacionais do sistema.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -391,7 +414,7 @@ export default function AdminTools() {
                     ) : (
                       <>
                         <Icon className="w-4 h-4 mr-2" />
-                        {danger ? 'APAGAR TUDO' : `Deletar ${cfg.title.replace('Limpar ', '')}`}
+                        {danger ? 'APAGAR DADOS OPERACIONAIS' : `Deletar ${cfg.title.replace('Limpar ', '')}`}
                       </>
                     )}
                   </Button>
