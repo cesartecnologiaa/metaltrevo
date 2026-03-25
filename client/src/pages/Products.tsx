@@ -26,83 +26,6 @@ import { Category } from '@/types';
 import { usePermissions } from '@/hooks/usePermissions';
 import Layout from '@/components/Layout';
 
-function normalizeText(value: string | undefined | null) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase();
-}
-
-function getCategoryKeywords(categoryName: string) {
-  const key = normalizeText(categoryName);
-
-  if (key.includes('eletric')) {
-    return ['tomada','interruptor','inter sim','cabo','fio','fios','resistencia','ducha','caixa de luz','bocal','barramento','canaleta','conduite','canduite','eletroduto','emenda de canduite','emenda de caduite'];
-  }
-  if (key.includes('cimento') || key.includes('argamassa')) {
-    return ['cimento','argamassa','rejunte','cal ','cal hidrat','cal 7kg','cal hdratado'];
-  }
-  if (key.includes('areia') || key.includes('pedra') || key.includes('brita')) {
-    return ['areia','brita','pedra','cascalho'];
-  }
-  if (key.includes('hidraul')) {
-    return ['torneira','registro','amanco','adesivo pvc','adesivo amanco','caixa sifonada','caixa gordura','caixa descarga','caixa dagua','caixa dgua','boia','anel p/tubo','adap ','adapt','tubo','joelho','luva','sifao','sifão','vaso sanit','assento sanit','bomba periferica','bomba subm','bomba anauger','bomba'];
-  }
-  if (key.includes('pintura')) {
-    return ['tinta','rolo','pincel','bandeija de pintura','bandeja de pintura','massa corrida','verniz','aguarras','agua raz','selador','fita crepe'];
-  }
-  if (key.includes('ferrament')) {
-    return ['alicate','broca','disco','serra','ancinho','aplicador','picareta','martelo','trena','chave','esmerilhadeira','carrinho de mao','carrinho de mao','arco de serra'];
-  }
-  if (key.includes('ferrag')) {
-    return ['parafuso','porca','arruela','barra roscada','cadeado','fechadura','dobradica','dobradiça','gancho','grampo','abrac','abraç','corrente'];
-  }
-  return [];
-}
-
-function inferCategory(categories: any[], product: any) {
-  const currentId = String(product?.categoryId || '').trim();
-  if (currentId) {
-    const existing = categories.find((category: any) => category.id === currentId);
-    if (existing) {
-      return { categoryId: existing.id, categoryName: existing.name, inferred: false };
-    }
-  }
-
-  const importedName = String(product?.categoryName || '').trim();
-  if (importedName) {
-    const exact = categories.find((category: any) => normalizeText(category.name) === normalizeText(importedName));
-    if (exact) {
-      return { categoryId: exact.id, categoryName: exact.name, inferred: false };
-    }
-  }
-
-  const sourceText = normalizeText(
-    [
-      product?.name,
-      product?.description,
-      product?.categoryName,
-      product?.family,
-      product?.subFamily
-    ].filter(Boolean).join(' ')
-  );
-
-  for (const category of categories) {
-    const keywords = getCategoryKeywords(category.name);
-    if (keywords.some((keyword) => sourceText.includes(normalizeText(keyword)))) {
-      return { categoryId: category.id, categoryName: category.name, inferred: true };
-    }
-  }
-
-  return {
-    categoryId: String(product?.categoryId || '').trim(),
-    categoryName: String(product?.categoryName || product?.family || '').trim(),
-    inferred: false,
-  };
-}
-
-
 export default function Products() {
   const permissions = usePermissions();
   const [products, setProducts] = useState<Product[]>([]);
@@ -135,14 +58,13 @@ export default function Products() {
     loadData();
   }, []);
 
-  const normalizeProduct = (product: any, availableCategories: Category[] = categories): Product & any => {
+  const normalizeProduct = (product: any): Product & any => {
     const currentStock = Number(product?.currentStock ?? product?.stock ?? 0);
     const minStock = Number(product?.minStock ?? product?.minimumStock ?? 0);
     const salePrice = Number(product?.salePrice ?? product?.cashPrice ?? product?.price ?? 0);
     const cashPrice = Number(product?.cashPrice ?? product?.salePrice ?? product?.price ?? 0);
     const creditPrice = Number(product?.creditPrice ?? product?.salePrice ?? product?.price ?? 0);
     const costPrice = Number(product?.costPrice ?? product?.purchasePrice ?? 0);
-    const categoryMatch = inferCategory(availableCategories, product);
 
     return {
       ...product,
@@ -156,11 +78,9 @@ export default function Products() {
       costPrice,
       purchasePrice: costPrice,
       barCode: product?.barCode ?? product?.barcode ?? '',
-      categoryId: categoryMatch.categoryId || '',
-      categoryName: categoryMatch.categoryName || '',
+      categoryName: product?.categoryName ?? product?.family ?? '',
       active: product?.active !== false,
     };
-  };
   };
 
   const loadData = async () => {
@@ -170,7 +90,7 @@ export default function Products() {
         getAllProducts(),
         getAllCategories()
       ]);
-      const normalizedProducts = (productsData || []).map((product: any) => normalizeProduct(product, categoriesData));
+      const normalizedProducts = (productsData || []).map((product: any) => normalizeProduct(product));
       setProducts(normalizedProducts);
       setCategories(categoriesData);
     } catch (error) {
@@ -242,10 +162,6 @@ export default function Products() {
         imageUrl = await uploadProductImage(formData.imageFile);
       }
 
-      const selectedCategory = formData.categoryId
-        ? categories.find(c => c.id === formData.categoryId)
-        : undefined;
-
       const productData = {
         name: formData.name,
         code: formData.code,
@@ -256,8 +172,10 @@ export default function Products() {
         costPrice: Number(formData.costPrice),
         currentStock: Number(formData.stock),
         minStock: Number(formData.minStock),
-        categoryId: selectedCategory?.id || undefined,
-        categoryName: selectedCategory?.name || undefined,
+        categoryId: formData.categoryId || undefined,
+        categoryName: formData.categoryId
+          ? categories.find(c => c.id === formData.categoryId)?.name
+          : undefined,
         imageUrl,
         active: true,
       };
