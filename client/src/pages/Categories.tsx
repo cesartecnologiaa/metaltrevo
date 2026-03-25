@@ -28,6 +28,75 @@ function normalizeText(value: string | undefined | null) {
     .toLowerCase();
 }
 
+function getCategoryKeywords(categoryName: string) {
+  const key = normalizeText(categoryName);
+
+  if (key.includes('eletric')) {
+    return ['tomada','interruptor','inter sim','cabo','fio','fios','resistencia','ducha','caixa de luz','bocal','barramento','canaleta','conduite','canduite','eletroduto','emenda de canduite','emenda de caduite'];
+  }
+  if (key.includes('cimento') || key.includes('argamassa')) {
+    return ['cimento','argamassa','rejunte','cal ','cal hidrat','cal 7kg','cal hdratado'];
+  }
+  if (key.includes('areia') || key.includes('pedra') || key.includes('brita')) {
+    return ['areia','brita','pedra','cascalho'];
+  }
+  if (key.includes('hidraul')) {
+    return ['torneira','registro','amanco','adesivo pvc','adesivo amanco','caixa sifonada','caixa gordura','caixa descarga','caixa dagua','caixa dgua','boia','anel p/tubo','adap ','adapt','tubo','joelho','luva','sifao','sifão','vaso sanit','assento sanit','bomba periferica','bomba subm','bomba anauger','bomba'];
+  }
+  if (key.includes('pintura')) {
+    return ['tinta','rolo','pincel','bandeija de pintura','bandeja de pintura','massa corrida','verniz','aguarras','agua raz','selador','fita crepe'];
+  }
+  if (key.includes('ferrament')) {
+    return ['alicate','broca','disco','serra','ancinho','aplicador','picareta','martelo','trena','chave','esmerilhadeira','carrinho de mao','carrinho de mao','arco de serra'];
+  }
+  if (key.includes('ferrag')) {
+    return ['parafuso','porca','arruela','barra roscada','cadeado','fechadura','dobradica','dobradiça','gancho','grampo','abrac','abraç','corrente'];
+  }
+  return [];
+}
+
+function inferCategory(categories: any[], product: any) {
+  const currentId = String(product?.categoryId || '').trim();
+  if (currentId) {
+    const existing = categories.find((category: any) => category.id === currentId);
+    if (existing) {
+      return { categoryId: existing.id, categoryName: existing.name, inferred: false };
+    }
+  }
+
+  const importedName = String(product?.categoryName || '').trim();
+  if (importedName) {
+    const exact = categories.find((category: any) => normalizeText(category.name) === normalizeText(importedName));
+    if (exact) {
+      return { categoryId: exact.id, categoryName: exact.name, inferred: false };
+    }
+  }
+
+  const sourceText = normalizeText(
+    [
+      product?.name,
+      product?.description,
+      product?.categoryName,
+      product?.family,
+      product?.subFamily
+    ].filter(Boolean).join(' ')
+  );
+
+  for (const category of categories) {
+    const keywords = getCategoryKeywords(category.name);
+    if (keywords.some((keyword) => sourceText.includes(normalizeText(keyword)))) {
+      return { categoryId: category.id, categoryName: category.name, inferred: true };
+    }
+  }
+
+  return {
+    categoryId: String(product?.categoryId || '').trim(),
+    categoryName: String(product?.categoryName || product?.family || '').trim(),
+    inferred: false,
+  };
+}
+
+
 export default function Categories() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [productCounts, setProductCounts] = useState<Record<string, number>>({});
@@ -58,31 +127,13 @@ export default function Categories() {
 
       setCategories(categoriesData);
 
-      const categoryById = new Map(categoriesData.map((category) => [category.id, category]));
-      const categoryIdByName = new Map(
-        categoriesData.map((category) => [normalizeText(category.name), category.id])
-      );
-
       const counts: Record<string, number> = {};
-
       productsData.forEach((product: any) => {
-        let resolvedCategoryId = product.categoryId;
-
-        if (!resolvedCategoryId) {
-          const importedCategoryName =
-            product.categoryName ||
-            product.family ||
-            product.category ||
-            '';
-
-          resolvedCategoryId = categoryIdByName.get(normalizeText(importedCategoryName));
-        }
-
-        if (resolvedCategoryId && categoryById.has(resolvedCategoryId)) {
-          counts[resolvedCategoryId] = (counts[resolvedCategoryId] || 0) + 1;
+        const categoryMatch = inferCategory(categoriesData, product);
+        if (categoryMatch.categoryId) {
+          counts[categoryMatch.categoryId] = (counts[categoryMatch.categoryId] || 0) + 1;
         }
       });
-
       setProductCounts(counts);
     } catch (error) {
       console.error('Error loading data:', error);

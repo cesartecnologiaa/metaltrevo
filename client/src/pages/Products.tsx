@@ -34,6 +34,74 @@ function normalizeText(value: string | undefined | null) {
     .toLowerCase();
 }
 
+function getCategoryKeywords(categoryName: string) {
+  const key = normalizeText(categoryName);
+
+  if (key.includes('eletric')) {
+    return ['tomada','interruptor','inter sim','cabo','fio','fios','resistencia','ducha','caixa de luz','bocal','barramento','canaleta','conduite','canduite','eletroduto','emenda de canduite','emenda de caduite'];
+  }
+  if (key.includes('cimento') || key.includes('argamassa')) {
+    return ['cimento','argamassa','rejunte','cal ','cal hidrat','cal 7kg','cal hdratado'];
+  }
+  if (key.includes('areia') || key.includes('pedra') || key.includes('brita')) {
+    return ['areia','brita','pedra','cascalho'];
+  }
+  if (key.includes('hidraul')) {
+    return ['torneira','registro','amanco','adesivo pvc','adesivo amanco','caixa sifonada','caixa gordura','caixa descarga','caixa dagua','caixa dgua','boia','anel p/tubo','adap ','adapt','tubo','joelho','luva','sifao','sifão','vaso sanit','assento sanit','bomba periferica','bomba subm','bomba anauger','bomba'];
+  }
+  if (key.includes('pintura')) {
+    return ['tinta','rolo','pincel','bandeija de pintura','bandeja de pintura','massa corrida','verniz','aguarras','agua raz','selador','fita crepe'];
+  }
+  if (key.includes('ferrament')) {
+    return ['alicate','broca','disco','serra','ancinho','aplicador','picareta','martelo','trena','chave','esmerilhadeira','carrinho de mao','carrinho de mao','arco de serra'];
+  }
+  if (key.includes('ferrag')) {
+    return ['parafuso','porca','arruela','barra roscada','cadeado','fechadura','dobradica','dobradiça','gancho','grampo','abrac','abraç','corrente'];
+  }
+  return [];
+}
+
+function inferCategory(categories: any[], product: any) {
+  const currentId = String(product?.categoryId || '').trim();
+  if (currentId) {
+    const existing = categories.find((category: any) => category.id === currentId);
+    if (existing) {
+      return { categoryId: existing.id, categoryName: existing.name, inferred: false };
+    }
+  }
+
+  const importedName = String(product?.categoryName || '').trim();
+  if (importedName) {
+    const exact = categories.find((category: any) => normalizeText(category.name) === normalizeText(importedName));
+    if (exact) {
+      return { categoryId: exact.id, categoryName: exact.name, inferred: false };
+    }
+  }
+
+  const sourceText = normalizeText(
+    [
+      product?.name,
+      product?.description,
+      product?.categoryName,
+      product?.family,
+      product?.subFamily
+    ].filter(Boolean).join(' ')
+  );
+
+  for (const category of categories) {
+    const keywords = getCategoryKeywords(category.name);
+    if (keywords.some((keyword) => sourceText.includes(normalizeText(keyword)))) {
+      return { categoryId: category.id, categoryName: category.name, inferred: true };
+    }
+  }
+
+  return {
+    categoryId: String(product?.categoryId || '').trim(),
+    categoryName: String(product?.categoryName || product?.family || '').trim(),
+    inferred: false,
+  };
+}
+
 
 export default function Products() {
   const permissions = usePermissions();
@@ -67,43 +135,6 @@ export default function Products() {
     loadData();
   }, []);
 
-
-  const resolveCategory = (product: any, availableCategories: Category[]) => {
-    const categoryById = new Map(availableCategories.map((category) => [category.id, category]));
-    const categoryByName = new Map(
-      availableCategories.map((category) => [normalizeText(category.name), category])
-    );
-
-    const existingCategory = product?.categoryId ? categoryById.get(product.categoryId) : null;
-    if (existingCategory) {
-      return {
-        categoryId: existingCategory.id,
-        categoryName: existingCategory.name,
-      };
-    }
-
-    const importedCategoryName =
-      product?.categoryName ||
-      product?.family ||
-      product?.category ||
-      '';
-
-    const matchedCategory = categoryByName.get(normalizeText(importedCategoryName));
-
-    if (matchedCategory) {
-      return {
-        categoryId: matchedCategory.id,
-        categoryName: matchedCategory.name,
-      };
-    }
-
-    return {
-      categoryId: product?.categoryId || '',
-      categoryName: product?.categoryName || product?.family || '',
-    };
-  };
-
-
   const normalizeProduct = (product: any, availableCategories: Category[] = categories): Product & any => {
     const currentStock = Number(product?.currentStock ?? product?.stock ?? 0);
     const minStock = Number(product?.minStock ?? product?.minimumStock ?? 0);
@@ -111,8 +142,7 @@ export default function Products() {
     const cashPrice = Number(product?.cashPrice ?? product?.salePrice ?? product?.price ?? 0);
     const creditPrice = Number(product?.creditPrice ?? product?.salePrice ?? product?.price ?? 0);
     const costPrice = Number(product?.costPrice ?? product?.purchasePrice ?? 0);
-
-    const resolvedCategory = resolveCategory(product, availableCategories);
+    const categoryMatch = inferCategory(availableCategories, product);
 
     return {
       ...product,
@@ -126,9 +156,11 @@ export default function Products() {
       costPrice,
       purchasePrice: costPrice,
       barCode: product?.barCode ?? product?.barcode ?? '',
-      categoryName: product?.categoryName ?? product?.family ?? '',
+      categoryId: categoryMatch.categoryId || '',
+      categoryName: categoryMatch.categoryName || '',
       active: product?.active !== false,
     };
+  };
   };
 
   const loadData = async () => {
@@ -295,10 +327,8 @@ export default function Products() {
   });
 
   const visibleProducts = filteredProducts.filter(product => {
-    const resolvedCategory = resolveCategory(product, categories);
-
     const matchesCategory =
-      filterCategory === 'all' || resolvedCategory.categoryId === filterCategory;
+      filterCategory === 'all' || product.categoryId === filterCategory;
 
     const matchesStatus =
       filterStatus === 'all' ||
@@ -444,9 +474,9 @@ export default function Products() {
                     <p className="text-white/70 text-sm mb-3 line-clamp-2">{product.description}</p>
                   )}
 
-                  {resolveCategory(product, categories).categoryName && (
+                  {product.categoryName && (
                     <span className="inline-block px-2 py-1 rounded-md bg-blue-500/20 text-blue-300 text-xs mb-3">
-                      {resolveCategory(product, categories).categoryName}
+                      {product.categoryName}
                     </span>
                   )}
 
