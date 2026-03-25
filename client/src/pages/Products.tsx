@@ -65,8 +65,8 @@ export default function Products() {
         getAllProducts(),
         getAllCategories()
       ]);
-      console.log('Categories loaded:', categoriesData);
-      setProducts(productsData);
+      const normalizedProducts = (productsData || []).map((product: any) => normalizeProduct(product));
+      setProducts(normalizedProducts);
       setCategories(categoriesData);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -76,18 +76,48 @@ export default function Products() {
     }
   };
 
+
+  const normalizeProduct = (product: any): Product & any => {
+    const currentStock = Number(product?.currentStock ?? product?.stock ?? 0);
+    const minStock = Number(product?.minStock ?? product?.minimumStock ?? 0);
+    const salePrice = Number(product?.salePrice ?? product?.cashPrice ?? product?.price ?? 0);
+    const creditPrice = Number(product?.creditPrice ?? product?.salePrice ?? product?.price ?? 0);
+    const cashPrice = Number(product?.cashPrice ?? product?.salePrice ?? product?.price ?? 0);
+    const costPrice = Number(product?.costPrice ?? product?.purchasePrice ?? 0);
+
+    return {
+      ...product,
+      currentStock,
+      stock: currentStock,
+      minStock,
+      salePrice,
+      price: salePrice,
+      cashPrice,
+      creditPrice,
+      costPrice,
+      purchasePrice: costPrice,
+      barCode: product?.barCode ?? product?.barcode ?? '',
+      categoryName: product?.categoryName ?? product?.family ?? '',
+      active: product?.active !== false,
+    };
+  };
+
   const handleOpenDialog = (product?: Product) => {
+    const normalizedProduct = product ? normalizeProduct(product as any) : null;
+    if (normalizedProduct) {
+      product = normalizedProduct as any;
+    }
     if (product) {
       setEditingProduct(product);
       setFormData({
         name: product.name,
         code: product.code,
         description: product.description || '',
-        cashPrice: product.cashPrice?.toString() || product.price.toString(),
-        creditPrice: product.creditPrice?.toString() || product.price.toString(),
-        costPrice: product.costPrice.toString(),
-        stock: ((product as any).currentStock || (product as any).stock || 0).toString(),
-        minStock: product.minStock.toString(),
+        cashPrice: Number((product as any).cashPrice ?? (product as any).salePrice ?? product.price ?? 0).toString(),
+        creditPrice: Number((product as any).creditPrice ?? (product as any).salePrice ?? product.price ?? 0).toString(),
+        costPrice: Number((product as any).costPrice ?? (product as any).purchasePrice ?? 0).toString(),
+        stock: Number((product as any).currentStock ?? (product as any).stock ?? 0).toString(),
+        minStock: Number((product as any).minStock ?? (product as any).minimumStock ?? 0).toString(),
         categoryId: product.categoryId || '',
         imageFile: null,
         imageUrl: product.imageUrl || '',
@@ -257,9 +287,9 @@ export default function Products() {
   // Filtros
   const filteredProducts = products.filter(product => {
     const matchesSearch = 
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.code.includes(searchTerm) ||
-      (product.description && product.description.toLowerCase().includes(searchTerm.toLowerCase()));
+      String(product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      String(product.code || '').includes(searchTerm) ||
+      (product.description && String(product.description).toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesCategory = filterCategory === 'all' || product.categoryId === filterCategory;
     const matchesStatus = filterStatus === 'all' || 
@@ -413,31 +443,31 @@ export default function Products() {
                   <div>
                     <p className="text-white/50 text-xs">Preço de Venda</p>
                     <p className="text-green-400 font-bold text-xl">
-                      R$ {formatCurrency(product.price)}
+                      R$ {formatCurrency(Number((product as any).salePrice ?? product.cashPrice ?? product.price ?? 0))}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-white/50 text-xs">Estoque</p>
                     <p className={`font-bold text-lg ${
-                      product.currentStock <= 0 
+                      Number((product as any).currentStock ?? product.stock ?? 0) <= 0 
                         ? 'text-red-400' 
-                        : product.currentStock <= product.minStock 
+                        : Number((product as any).currentStock ?? product.stock ?? 0) <= Number(product.minStock ?? 0) 
                         ? 'text-orange-400' 
                         : 'text-white'
                     }`}>
-                      {product.currentStock}
+                      {Number((product as any).currentStock ?? product.stock ?? 0).toLocaleString('pt-BR')}
                     </p>
                   </div>
                 </div>
 
-                {product.currentStock <= product.minStock && product.currentStock > 0 && (
+                {Number((product as any).currentStock ?? product.stock ?? 0) <= Number(product.minStock ?? 0) && Number((product as any).currentStock ?? product.stock ?? 0) > 0 && (
                   <div className="flex items-center gap-1 text-orange-400 text-xs mb-3">
                     <AlertTriangle className="w-3 h-3" />
-                    <span>Estoque baixo (mín: {product.minStock})</span>
+                    <span>Estoque baixo (mín: {Number(product.minStock ?? 0).toLocaleString('pt-BR')})</span>
                   </div>
                 )}
 
-                {product.currentStock <= 0 && (
+                {Number((product as any).currentStock ?? product.stock ?? 0) <= 0 && (
                   <div className="flex items-center gap-1 text-red-400 text-xs mb-3">
                     <AlertTriangle className="w-3 h-3" />
                     <span>Sem estoque</span>
