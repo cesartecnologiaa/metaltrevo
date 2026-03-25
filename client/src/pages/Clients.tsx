@@ -113,30 +113,12 @@ export default function Clients() {
 
   const matchesClientSearch = (client: any, term: string) => {
     const search = term.trim().toLowerCase();
-    const numericSearch = term.replace(/[^\d]/g, '');
-
     if (!search) return false;
 
-    const haystacks = [
-      getClientDisplayName(client).toLowerCase(),
-      String(client?.code || client?.legacyCode || '').toLowerCase(),
-      String(client?.email || '').toLowerCase(),
-      getClientAddressLabel(client).toLowerCase(),
-    ];
+    const clientName = getClientDisplayName(client).toLowerCase();
+    const clientCode = String(client?.code || client?.legacyCode || '').toLowerCase();
 
-    const matchesText = haystacks.some((value) => value.includes(search));
-
-    const numericFields = [
-      getClientDocument(client).replace(/[^\d]/g, ''),
-      String(client?.phone || '').replace(/[^\d]/g, ''),
-      String(client?.code || client?.legacyCode || '').replace(/[^\d]/g, ''),
-    ];
-
-    const matchesNumeric = numericSearch
-      ? numericFields.some((value) => value.includes(numericSearch))
-      : false;
-
-    return matchesText || matchesNumeric;
+    return clientName.includes(search) || clientCode.includes(search);
   };
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -528,7 +510,7 @@ export default function Clients() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/50 w-5 h-5" />
               <Input
                 type="text"
-                placeholder="Digite nome, código, CPF/CNPJ, telefone ou e-mail..."
+                placeholder="Digite o nome ou código do cliente..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 bg-white/5 border-white/20 text-white placeholder:text-white/50"
