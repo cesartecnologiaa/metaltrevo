@@ -78,7 +78,8 @@ export default function Clients() {
     setLoading(true);
     try {
       const clientsData = await getAllClients();
-      setClients(clientsData);
+      const normalizedClients = (clientsData || []).map((client: any) => normalizeClient(client));
+      setClients(normalizedClients);
     } catch (error) {
       console.error('Error loading clients:', error);
       toast.error('Erro ao carregar clientes');
@@ -87,15 +88,61 @@ export default function Clients() {
     }
   };
 
+
+  const normalizeClient = (client: any): Client & any => {
+    const address = client?.address
+      ? {
+          street: client.address?.street || '',
+          number: client.address?.number || '',
+          complement: client.address?.complement || '',
+          neighborhood: client.address?.neighborhood || '',
+          city: client.address?.city || '',
+          state: client.address?.state || '',
+          zipCode: client.address?.zipCode || '',
+        }
+      : undefined;
+
+    return {
+      ...client,
+      name: String(client?.name || client?.fantasyName || client?.code || client?.legacyCode || 'Cliente sem nome'),
+      cpfCnpj: String(client?.cpfCnpj || client?.document || ''),
+      email: String(client?.email || ''),
+      phone: String(client?.phone || client?.whatsapp || ''),
+      active: client?.active !== false,
+      address,
+      legacyOpenAmount: Number(client?.legacyOpenAmount || 0),
+      legacyTotalSales: Number(client?.legacyTotalSales || 0),
+      createdAt: client?.createdAt || null,
+      code: client?.code || client?.legacyCode || '',
+      legacyCode: client?.legacyCode || client?.code || '',
+    };
+  };
+
+  const getClientDisplayName = (client: any) => {
+    return String(client?.name || client?.code || client?.legacyCode || 'Cliente sem nome');
+  };
+
+  const getClientDocument = (client: any) => {
+    return String(client?.cpfCnpj || client?.document || '');
+  };
+
+  const getClientAddressLabel = (client: any) => {
+    const street = client?.address?.street || '';
+    const city = client?.address?.city || '';
+    const state = client?.address?.state || '';
+    return [street, city, state].filter(Boolean).join(' - ');
+  };
+
   const handleOpenDialog = (client?: Client) => {
     if (client) {
-      setEditingClient(client);
+      const normalizedClient = normalizeClient(client as any);
+      setEditingClient(normalizedClient);
       setFormData({
-        name: client.name,
-        cpfCnpj: client.cpfCnpj,
-        email: client.email || '',
-        phone: client.phone || '',
-        street: client.address?.street || '',
+        name: normalizedClient.name,
+        cpfCnpj: normalizedClient.cpfCnpj,
+        email: normalizedClient.email || '',
+        phone: normalizedClient.phone || '',
+        street: normalizedClient.address?.street || '',
         number: client.address?.number || '',
         complement: client.address?.complement || '',
         neighborhood: client.address?.neighborhood || '',
@@ -261,11 +308,14 @@ export default function Clients() {
 
   const filteredClients = useMemo(() => {
     return clients.filter(client => {
+      const normalizedSearch = searchTerm.toLowerCase();
+      const numericSearch = searchTerm.replace(/[^\d]/g, '');
       const matchesSearch =
-        client?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        client?.cpfCnpj?.includes(searchTerm.replace(/[^\d]/g, '')) ||
-        (client?.email && client.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (client?.phone && client.phone.includes(searchTerm.replace(/[^\d]/g, '')));
+        getClientDisplayName(client).toLowerCase().includes(normalizedSearch) ||
+        String(client?.code || client?.legacyCode || '').toLowerCase().includes(normalizedSearch) ||
+        getClientDocument(client).includes(numericSearch) ||
+        (client?.email && String(client.email).toLowerCase().includes(normalizedSearch)) ||
+        (client?.phone && String(client.phone).replace(/[^\d]/g, '').includes(numericSearch));
 
       const matchesStatus =
         filterStatus === 'all' ||
@@ -280,9 +330,12 @@ export default function Clients() {
     if (searchTerm.trim()) return filteredClients;
 
     const sorted = [...filteredClients].sort((a, b) => {
-      const dateA = (a as any)?.createdAt?.toDate?.() || new Date((a as any)?.createdAt || 0);
-      const dateB = (b as any)?.createdAt?.toDate?.() || new Date((b as any)?.createdAt || 0);
-      return dateB.getTime() - dateA.getTime();
+      const dateA = (a as any)?.createdAt?.toDate?.() || ((a as any)?.createdAt ? new Date((a as any)?.createdAt) : null);
+      const dateB = (b as any)?.createdAt?.toDate?.() || ((b as any)?.createdAt ? new Date((b as any)?.createdAt) : null);
+      if (dateA && !isNaN(dateA.getTime()) && dateB && !isNaN(dateB.getTime())) {
+        return dateB.getTime() - dateA.getTime();
+      }
+      return String((b as any)?.code || '').localeCompare(String((a as any)?.code || ''));
     });
 
     return sorted.slice(0, 5);
@@ -470,9 +523,9 @@ export default function Clients() {
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
-                  <h3 className="text-white font-bold text-lg">{client.name}</h3>
+                  <h3 className="text-white font-bold text-lg">{getClientDisplayName(client)}</h3>
                   <p className="text-white/50 text-sm">
-                    {formatCpfCnpj(client.cpfCnpj)}
+                    {getClientDocument(client) ? formatCpfCnpj(getClientDocument(client)) : (client.code || client.legacyCode || 'Sem documento')}
                   </p>
                 </div>
                 {!client.active && (
@@ -511,18 +564,33 @@ export default function Clients() {
                 {client.phone && (
                   <div className="flex items-center gap-2 text-white/70 text-sm">
                     <Phone className="w-4 h-4" />
-                    <span>{formatPhone(client.phone)}</span>
+                    <span>{client.phone ? formatPhone(client.phone) : 'Sem telefone'}</span>
                   </div>
                 )}
                 {client.address && (
                   <div className="flex items-start gap-2 text-white/70 text-sm">
                     <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
                     <span className="line-clamp-2">
-                      {client.address.city}, {client.address.state}
+                      {getClientAddressLabel(client) || 'Endereço não informado'}
                     </span>
                   </div>
                 )}
               </div>
+
+              {(Number(client.legacyOpenAmount || 0) > 0 || Number(client.legacyTotalSales || 0) > 0) && (
+                <div className="mb-4 rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-white/70">
+                  {Number(client.legacyOpenAmount || 0) > 0 && (
+                    <div>
+                      Em aberto legado: <span className="font-semibold text-yellow-300">R$ {formatCurrency(Number(client.legacyOpenAmount || 0))}</span>
+                    </div>
+                  )}
+                  {Number(client.legacyTotalSales || 0) > 0 && (
+                    <div>
+                      Total comprado legado: <span className="font-semibold text-cyan-300">R$ {formatCurrency(Number(client.legacyTotalSales || 0))}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Ações */}
               <div className="space-y-2">
