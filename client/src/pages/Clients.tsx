@@ -628,18 +628,11 @@ export default function Clients() {
                 )}
               </div>
 
-              {(Number(client.legacyOpenAmount || 0) > 0 || Number(client.legacyTotalSales || 0) > 0) && (
+              {Number(client.legacyOpenAmount || 0) > 0 && (
                 <div className="mb-4 rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-white/70">
-                  {Number(client.legacyOpenAmount || 0) > 0 && (
-                    <div>
-                      Em aberto legado: <span className="font-semibold text-yellow-300">R$ {formatCurrency(Number(client.legacyOpenAmount || 0))}</span>
-                    </div>
-                  )}
-                  {Number(client.legacyTotalSales || 0) > 0 && (
-                    <div>
-                      Total comprado legado: <span className="font-semibold text-cyan-300">R$ {formatCurrency(Number(client.legacyTotalSales || 0))}</span>
-                    </div>
-                  )}
+                  <div>
+                    Débitos pendentes: <span className="font-semibold text-yellow-300">R$ {formatCurrency(Number(client.legacyOpenAmount || 0))}</span>
+                  </div>
                 </div>
               )}
 
