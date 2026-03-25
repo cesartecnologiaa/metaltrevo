@@ -26,6 +26,7 @@ import {
 } from '@/lib/validators';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuthContext } from '@/contexts/AuthContext';
+import { useLocation } from 'wouter';
 import { formatCurrency } from '@/lib/formatters';
 import { formatDate as formatFirestoreDate } from '@/lib/firestoreUtils';
 import { getClientPendingBalance, getClientPendingInstallments, markInstallmentAsPaid } from '@/services/accountsReceivableService';
@@ -33,6 +34,103 @@ import { getClientPendingBalance, getClientPendingInstallments, markInstallmentA
 export default function Clients() {
   const permissions = usePermissions();
   const { userData } = useAuthContext();
+  const [, setLocation] = useLocation();
+
+  const normalizeClient = (client: any): Client & any => {
+    const normalizedName = String(
+      client?.name ||
+      client?.fantasyName ||
+      client?.razaoSocial ||
+      client?.legacyName ||
+      ''
+    ).trim();
+
+    const normalizedCode = String(client?.code || client?.legacyCode || '').trim();
+    const normalizedCpfCnpj = String(client?.cpfCnpj || client?.document || '').trim();
+    const normalizedPhone = String(client?.phone || client?.whatsapp || '').trim();
+    const normalizedEmail = String(client?.email || '').trim();
+
+    const address = client?.address
+      ? {
+          street: String(client.address?.street || '').trim(),
+          number: String(client.address?.number || '').trim(),
+          complement: String(client.address?.complement || '').trim(),
+          neighborhood: String(client.address?.neighborhood || '').trim(),
+          city: String(client.address?.city || '').trim(),
+          state: String(client.address?.state || '').trim(),
+          zipCode: String(client.address?.zipCode || '').trim(),
+        }
+      : undefined;
+
+    return {
+      ...client,
+      name: normalizedName,
+      code: normalizedCode,
+      legacyCode: normalizedCode || String(client?.legacyCode || '').trim(),
+      cpfCnpj: normalizedCpfCnpj,
+      email: normalizedEmail,
+      phone: normalizedPhone,
+      active: client?.active !== false,
+      address,
+      legacyOpenAmount: Number(client?.legacyOpenAmount || 0),
+      legacyTotalSales: Number(client?.legacyTotalSales || 0),
+    };
+  };
+
+  const getClientDisplayName = (client: any) => {
+    const name = String(client?.name || '').trim();
+    const code = String(client?.code || client?.legacyCode || '').trim();
+    return name || code || 'Cliente sem nome';
+  };
+
+  const getClientDocument = (client: any) => {
+    return String(client?.cpfCnpj || client?.document || '').trim();
+  };
+
+  const getClientAddressLabel = (client: any) => {
+    const parts = [
+      client?.address?.street,
+      client?.address?.city,
+      client?.address?.state,
+    ]
+      .map((value: any) => String(value || '').trim())
+      .filter(Boolean);
+
+    return parts.join(' - ');
+  };
+
+  const hasMeaningfulClientData = (client: any) => {
+    return Boolean(
+      String(client?.name || '').trim() ||
+      String(client?.code || client?.legacyCode || '').trim() ||
+      String(client?.cpfCnpj || '').trim() ||
+      String(client?.phone || '').trim() ||
+      String(client?.email || '').trim() ||
+      String(client?.address?.street || '').trim()
+    );
+  };
+
+  const matchesClientSearch = (client: any, term: string) => {
+    const search = term.trim().toLowerCase();
+    const numericSearch = term.replace(/[^\d]/g, '');
+
+    if (!search && !numericSearch) return true;
+
+    const haystacks = [
+      getClientDisplayName(client).toLowerCase(),
+      String(client?.code || client?.legacyCode || '').toLowerCase(),
+      String(client?.email || '').toLowerCase(),
+      getClientAddressLabel(client).toLowerCase(),
+    ];
+
+    const matchesText = haystacks.some((value) => value.includes(search));
+    const matchesNumeric = [
+      getClientDocument(client).replace(/[^\d]/g, ''),
+      String(client?.phone || '').replace(/[^\d]/g, ''),
+    ].some((value) => value.includes(numericSearch));
+
+    return search ? (matchesText || matchesNumeric) : matchesNumeric;
+  };
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -78,7 +176,7 @@ export default function Clients() {
     setLoading(true);
     try {
       const clientsData = await getAllClients();
-      const normalizedClients = (clientsData || []).map((client: any) => normalizeClient(client));
+      const normalizedClients = (clientsData || []).map((client: any) => normalizeClient(client)).filter(hasMeaningfulClientData);
       setClients(normalizedClients);
     } catch (error) {
       console.error('Error loading clients:', error);
@@ -86,51 +184,6 @@ export default function Clients() {
     } finally {
       setLoading(false);
     }
-  };
-
-
-  const normalizeClient = (client: any): Client & any => {
-    const address = client?.address
-      ? {
-          street: client.address?.street || '',
-          number: client.address?.number || '',
-          complement: client.address?.complement || '',
-          neighborhood: client.address?.neighborhood || '',
-          city: client.address?.city || '',
-          state: client.address?.state || '',
-          zipCode: client.address?.zipCode || '',
-        }
-      : undefined;
-
-    return {
-      ...client,
-      name: String(client?.name || client?.fantasyName || client?.code || client?.legacyCode || 'Cliente sem nome'),
-      cpfCnpj: String(client?.cpfCnpj || client?.document || ''),
-      email: String(client?.email || ''),
-      phone: String(client?.phone || client?.whatsapp || ''),
-      active: client?.active !== false,
-      address,
-      legacyOpenAmount: Number(client?.legacyOpenAmount || 0),
-      legacyTotalSales: Number(client?.legacyTotalSales || 0),
-      createdAt: client?.createdAt || null,
-      code: client?.code || client?.legacyCode || '',
-      legacyCode: client?.legacyCode || client?.code || '',
-    };
-  };
-
-  const getClientDisplayName = (client: any) => {
-    return String(client?.name || client?.code || client?.legacyCode || 'Cliente sem nome');
-  };
-
-  const getClientDocument = (client: any) => {
-    return String(client?.cpfCnpj || client?.document || '');
-  };
-
-  const getClientAddressLabel = (client: any) => {
-    const street = client?.address?.street || '';
-    const city = client?.address?.city || '';
-    const state = client?.address?.state || '';
-    return [street, city, state].filter(Boolean).join(' - ');
   };
 
   const handleOpenDialog = (client?: Client) => {
@@ -143,12 +196,12 @@ export default function Clients() {
         email: normalizedClient.email || '',
         phone: normalizedClient.phone || '',
         street: normalizedClient.address?.street || '',
-        number: client.address?.number || '',
-        complement: client.address?.complement || '',
-        neighborhood: client.address?.neighborhood || '',
-        city: client.address?.city || '',
-        state: client.address?.state || '',
-        zipCode: client.address?.zipCode || '',
+        number: normalizedClient.address?.number || '',
+        complement: normalizedClient.address?.complement || '',
+        neighborhood: normalizedClient.address?.neighborhood || '',
+        city: normalizedClient.address?.city || '',
+        state: normalizedClient.address?.state || '',
+        zipCode: normalizedClient.address?.zipCode || '',
       });
     } else {
       setEditingClient(null);
@@ -307,15 +360,10 @@ export default function Clients() {
   };
 
   const filteredClients = useMemo(() => {
-    return clients.filter(client => {
-      const normalizedSearch = searchTerm.toLowerCase();
-      const numericSearch = searchTerm.replace(/[^\d]/g, '');
-      const matchesSearch =
-        getClientDisplayName(client).toLowerCase().includes(normalizedSearch) ||
-        String(client?.code || client?.legacyCode || '').toLowerCase().includes(normalizedSearch) ||
-        getClientDocument(client).includes(numericSearch) ||
-        (client?.email && String(client.email).toLowerCase().includes(normalizedSearch)) ||
-        (client?.phone && String(client.phone).replace(/[^\d]/g, '').includes(numericSearch));
+    return clients.filter((client) => {
+      if (!hasMeaningfulClientData(client)) return false;
+
+      const matchesSearch = matchesClientSearch(client, searchTerm);
 
       const matchesStatus =
         filterStatus === 'all' ||
@@ -327,18 +375,18 @@ export default function Clients() {
   }, [clients, searchTerm, filterStatus]);
 
   const visibleClients = useMemo(() => {
-    if (searchTerm.trim()) return filteredClients;
+    const ordered = [...filteredClients].sort((a: any, b: any) => {
+      const dateA = a?.createdAt?.toDate?.() || (a?.createdAt ? new Date(a.createdAt) : null);
+      const dateB = b?.createdAt?.toDate?.() || (b?.createdAt ? new Date(b.createdAt) : null);
 
-    const sorted = [...filteredClients].sort((a, b) => {
-      const dateA = (a as any)?.createdAt?.toDate?.() || ((a as any)?.createdAt ? new Date((a as any)?.createdAt) : null);
-      const dateB = (b as any)?.createdAt?.toDate?.() || ((b as any)?.createdAt ? new Date((b as any)?.createdAt) : null);
       if (dateA && !isNaN(dateA.getTime()) && dateB && !isNaN(dateB.getTime())) {
         return dateB.getTime() - dateA.getTime();
       }
-      return String((b as any)?.code || '').localeCompare(String((a as any)?.code || ''));
+
+      return String(b?.code || b?.legacyCode || '').localeCompare(String(a?.code || a?.legacyCode || ''));
     });
 
-    return sorted.slice(0, 5);
+    return searchTerm.trim() ? ordered.slice(0, 50) : ordered.slice(0, 5);
   }, [filteredClients, searchTerm]);
 
   const visibleClientIdsKey = useMemo(() => {
@@ -425,7 +473,7 @@ export default function Clients() {
     const paymentKey = `${accountId}-${installmentNumber}`;
     setProcessingPaymentId(paymentKey);
     try {
-      await markInstallmentAsPaid(accountId, installmentNumber, userData.uid, userData.name);
+      await markInstallmentAsPaid(accountId, installmentNumber, userData.uid || '', userData.name || 'Usuário');
       toast.success('Parcela marcada como paga');
 
       if (selectedPendingClient) {
@@ -470,7 +518,7 @@ export default function Clients() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/50 w-5 h-5" />
               <Input
                 type="text"
-                placeholder="Nome, CPF/CNPJ, e-mail ou telefone..."
+                placeholder="Nome, código, CPF/CNPJ, e-mail, telefone..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 bg-white/5 border-white/20 text-white placeholder:text-white/50"
@@ -509,7 +557,7 @@ export default function Clients() {
         <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-12 text-center">
           <Users className="w-16 h-16 mx-auto mb-4 text-white/30" />
           <p className="text-white/70 text-lg">Nenhum cliente encontrado</p>
-          <p className="text-white/50 text-sm mt-2">Cadastre seu primeiro cliente para começar</p>
+          <p className="text-white/50 text-sm mt-2">Use a busca para localizar clientes importados ou cadastre um novo cliente.</p>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -525,8 +573,11 @@ export default function Clients() {
                 <div className="flex-1">
                   <h3 className="text-white font-bold text-lg">{getClientDisplayName(client)}</h3>
                   <p className="text-white/50 text-sm">
-                    {getClientDocument(client) ? formatCpfCnpj(getClientDocument(client)) : (client.code || client.legacyCode || 'Sem documento')}
+                    {getClientDocument(client) ? formatCpfCnpj(getClientDocument(client)) : 'Sem documento'}
                   </p>
+                  {(client.code || client.legacyCode) && (
+                    <p className="text-white/35 text-xs mt-1">Código: {client.code || client.legacyCode}</p>
+                  )}
                 </div>
                 {!client.active && (
                   <span className="px-2 py-1 rounded-md bg-red-500/20 text-red-300 text-xs">
@@ -595,15 +646,27 @@ export default function Clients() {
               {/* Ações */}
               <div className="space-y-2">
                 {hasPending && (
-                  <Button
-                    onClick={() => openPendingDialog(client)}
-                    variant="outline"
-                    size="sm"
-                    className="w-full border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
-                  >
-                    <DollarSign className="w-4 h-4 mr-2" />
-                    Ver pendências / Dar baixa
-                  </Button>
+                  <>
+                    <Button
+                      onClick={() => openPendingDialog(client)}
+                      variant="outline"
+                      size="sm"
+                      className="w-full border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
+                    >
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Ver pendências / Dar baixa
+                    </Button>
+
+                    <Button
+                      onClick={() => setLocation(`/contas-receber?cliente=${encodeURIComponent(String(client.id))}`)}
+                      variant="outline"
+                      size="sm"
+                      className="w-full border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10"
+                    >
+                      <Search className="w-4 h-4 mr-2" />
+                      Abrir em Contas a Receber
+                    </Button>
+                  </>
                 )}
 
                 <div className="flex gap-2">
