@@ -257,17 +257,13 @@ export default function Products() {
 
   // Filtros
   const filteredProducts = products.filter(product => {
-    const matchesSearch = 
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.code.includes(searchTerm) ||
-      (product.description && product.description.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const matchesCategory = filterCategory === 'all' || product.categoryId === filterCategory;
-    const matchesStatus = filterStatus === 'all' || 
-      (filterStatus === 'active' && product.active) ||
-      (filterStatus === 'inactive' && !product.active);
+    const search = searchTerm.trim().toLowerCase();
+    if (!search) return false;
 
-    return matchesSearch && matchesCategory && matchesStatus;
+    const productName = String(product?.name || '').toLowerCase();
+    const productCode = String(product?.code || '').toLowerCase();
+
+    return productName.includes(search) || productCode.includes(search);
   });
 
   return (
@@ -359,11 +355,17 @@ export default function Products() {
         <div className="text-center py-12 text-white/70">
           Carregando produtos...
         </div>
+      ) : !searchTerm.trim() ? (
+        <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-12 text-center">
+          <Package className="w-16 h-16 mx-auto mb-4 text-white/30" />
+          <p className="text-white/70 text-lg">Pesquise para localizar um produto</p>
+          <p className="text-white/50 text-sm mt-2">Digite o nome ou código do produto para buscar.</p>
+        </Card>
       ) : filteredProducts.length === 0 ? (
         <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-12 text-center">
           <Package className="w-16 h-16 mx-auto mb-4 text-white/30" />
           <p className="text-white/70 text-lg">Nenhum produto encontrado</p>
-          <p className="text-white/50 text-sm mt-2">Cadastre seu primeiro produto para começar</p>
+          <p className="text-white/50 text-sm mt-2">Tente buscar pelo nome ou código do produto.</p>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
