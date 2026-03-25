@@ -237,7 +237,7 @@ export default function PDV() {
     setLoading(true);
     try {
       const productsData = await getActiveProducts();
-      setProducts(productsData);
+      setProducts((productsData || []).map((product: any) => normalizeProduct(product)));
     } catch (error) {
       console.error('Error loading products:', error);
       toast.error('Erro ao carregar produtos');
@@ -258,17 +258,30 @@ export default function PDV() {
   };
 
   // Selecionar preço baseado na forma de pagamento e parcelas
+  const normalizeProduct = (product: Product | any): Product & any => {
+    const currentStock = Number(product?.currentStock ?? product?.stock ?? 0);
+    const cashPrice = Number(product?.cashPrice ?? product?.salePrice ?? product?.price ?? 0);
+    const creditPrice = Number(product?.creditPrice ?? product?.salePrice ?? product?.price ?? 0);
+
+    return {
+      ...product,
+      currentStock,
+      stock: currentStock,
+      cashPrice,
+      creditPrice,
+      price: Number(product?.price ?? product?.salePrice ?? cashPrice ?? 0),
+    };
+  };
+
   const getProductPrice = (product: Product): number => {
-    // Boleto = sempre preço a prazo
+    const normalizedProduct = normalizeProduct(product as any);
     if (paymentMethod === 'boleto') {
-      return product.creditPrice || product.price;
+      return Number(normalizedProduct.creditPrice ?? normalizedProduct.price ?? 0);
     }
-    // Crédito = preço a prazo apenas se 2x ou mais
     if (paymentMethod === 'cartao_credito' && installmentCount >= 2) {
-      return product.creditPrice || product.price;
+      return Number(normalizedProduct.creditPrice ?? normalizedProduct.price ?? 0);
     }
-    // Dinheiro, PIX, Débito, Crédito 1x = preço à vista
-    return product.cashPrice || product.price;
+    return Number(normalizedProduct.cashPrice ?? normalizedProduct.price ?? 0);
   };
 
   // Filtrar produtos em tempo real
@@ -276,8 +289,8 @@ export default function PDV() {
     if (!productSearch.trim()) return false;
     const term = productSearch.toLowerCase();
     return (
-      product.code.toLowerCase().includes(term) ||
-      product.name.toLowerCase().includes(term)
+      String(product.code || '').toLowerCase().includes(term) ||
+      String(product.name || '').toLowerCase().includes(term)
     );
   }).slice(0, 5); // Limitar a 5 resultados
 
@@ -304,15 +317,15 @@ export default function PDV() {
     
     if (existingItem) {
       // Verificar estoque disponível
-      if (existingItem.quantity >= product.currentStock) {
-        toast.error(`Estoque insuficiente! Disponível: ${product.currentStock}`);
+      if (existingItem.quantity >= Number((product as any).currentStock ?? (product as any).stock ?? 0)) {
+        toast.error(`Estoque insuficiente! Disponível: ${Number((product as any).currentStock ?? (product as any).stock ?? 0)}`);
         return;
       }
       setSelectedCartItemId(product.id);
       updateQuantity(product.id, existingItem.quantity + 1);
     } else {
       // Verificar se há estoque
-      if (product.currentStock <= 0) {
+      if (Number((product as any).currentStock ?? (product as any).stock ?? 0) <= 0) {
         toast.error('Produto sem estoque!');
         return;
       }
@@ -325,7 +338,7 @@ export default function PDV() {
         price,
         quantity: 1,
         subtotal: price,
-        availableStock: product.currentStock,
+        availableStock: Number((product as any).currentStock ?? (product as any).stock ?? 0),
       };
       setCart([...cart, newItem]);
       setSelectedCartItemId(product.id);
@@ -749,7 +762,7 @@ export default function PDV() {
                       </div>
                       <div className="text-right">
                         <p className="text-white font-bold">R$ {formatCurrency(getProductPrice(product))}</p>
-                        <p className="text-white/60 text-sm">Estoque: {product.currentStock}</p>
+                        <p className="text-white/60 text-sm">Estoque: {Number((product as any).currentStock ?? (product as any).stock ?? 0).toLocaleString('pt-BR')}</p>
                       </div>
                     </div>
                   </button>

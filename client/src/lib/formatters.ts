@@ -3,8 +3,9 @@
  * @param value - Valor numérico a ser formatado
  * @returns String formatada no padrão brasileiro (ex: "10.000,00")
  */
-export function formatCurrency(value: number): string {
-  return value.toLocaleString('pt-BR', {
+export function formatCurrency(value: number | string | null | undefined): string {
+  const numericValue = Number(value ?? 0);
+  return numericValue.toLocaleString('pt-BR', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });

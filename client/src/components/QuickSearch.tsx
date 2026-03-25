@@ -18,6 +18,25 @@ export default function QuickSearch({ open, onClose, onSelectProduct }: QuickSea
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const normalizeProduct = (product: any): Product & any => {
+    const currentStock = Number(product?.currentStock ?? product?.stock ?? 0);
+    const minStock = Number(product?.minStock ?? product?.minimumStock ?? 0);
+    const cashPrice = Number(product?.cashPrice ?? product?.salePrice ?? product?.price ?? 0);
+    const creditPrice = Number(product?.creditPrice ?? product?.salePrice ?? product?.price ?? 0);
+
+    return {
+      ...product,
+      currentStock,
+      stock: currentStock,
+      minStock,
+      cashPrice,
+      creditPrice,
+      price: Number(product?.price ?? product?.salePrice ?? cashPrice ?? 0),
+      categoryName: product?.categoryName ?? product?.family ?? '',
+    };
+  };
+
+
   useEffect(() => {
     if (open) {
       loadProducts();
@@ -34,7 +53,7 @@ export default function QuickSearch({ open, onClose, onSelectProduct }: QuickSea
     setLoading(true);
     try {
       const productsData = await getActiveProducts();
-      setProducts(productsData);
+      setProducts((productsData || []).map((product: any) => normalizeProduct(product)));
     } catch (error) {
       console.error('Error loading products:', error);
     } finally {
@@ -43,9 +62,9 @@ export default function QuickSearch({ open, onClose, onSelectProduct }: QuickSea
   };
 
   const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.code.includes(searchTerm) ||
-    (p.description && p.description.toLowerCase().includes(searchTerm.toLowerCase()))
+    String(p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    String(p.code || '').includes(searchTerm) ||
+    (p.description && String(p.description).toLowerCase().includes(searchTerm.toLowerCase()))
   ).slice(0, 10); // Limitar a 10 resultados
 
   const handleSelectProduct = (product: Product) => {
@@ -137,10 +156,10 @@ export default function QuickSearch({ open, onClose, onSelectProduct }: QuickSea
                     </div>
                     <div className="text-right ml-4 min-w-[140px]">
                       <p className="text-emerald-300 font-bold text-sm">
-                        À vista: R$ {formatCurrency(product.cashPrice || product.price)}
+                        À vista: R$ {formatCurrency(Number((product as any).cashPrice ?? (product as any).salePrice ?? product.price ?? 0))}
                       </p>
                       <p className="text-cyan-300 font-bold text-sm mt-1">
-                        A prazo: R$ {formatCurrency(product.creditPrice || product.price)}
+                        A prazo: R$ {formatCurrency(Number((product as any).creditPrice ?? (product as any).salePrice ?? product.price ?? 0))}
                       </p>
                       <p className={`text-sm font-semibold mt-2 ${
                         product.currentStock <= 0 
@@ -149,7 +168,7 @@ export default function QuickSearch({ open, onClose, onSelectProduct }: QuickSea
                           ? 'text-orange-400' 
                           : 'text-white/70'
                       }`}>
-                        Estoque: {product.currentStock}
+                        Estoque: {Number((product as any).currentStock ?? (product as any).stock ?? 0).toLocaleString('pt-BR')}
                       </p>
                     </div>
                   </div>
