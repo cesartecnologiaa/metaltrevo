@@ -422,7 +422,7 @@ export default function AccountsReceivable() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-white font-bold text-lg">#{account.saleNumber}</h3>
+                      <h3 className="text-white font-bold text-lg">#{getDisplaySaleNumber(account)}</h3>
                       <span className={`px-3 py-1 rounded-md text-xs font-semibold border ${getStatusColor(account.status)}`}>
                         {getStatusLabel(account.status)}
                       </span>
@@ -479,7 +479,7 @@ export default function AccountsReceivable() {
           <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
             <DialogContent className="max-w-3xl backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20 max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="text-2xl font-bold text-white">Detalhes da Conta #{selectedAccount.saleNumber}</DialogTitle>
+                <DialogTitle className="text-2xl font-bold text-white">Detalhes da Conta #{getDisplaySaleNumber(selectedAccount)}</DialogTitle>
                 <DialogDescription className="text-white/70">
                   Visualize as parcelas e registre pagamentos completos, parciais ou com valor excedente.
                 </DialogDescription>
