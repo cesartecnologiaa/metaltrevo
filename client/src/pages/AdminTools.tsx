@@ -65,8 +65,6 @@ const COLLECTIONS: Record<ActionKey, { title: string; description: string; colle
   },
 };
 
-const IMPORT_COLLECTIONS = ['products', 'clients', 'accountsReceivable', 'accountsPayable', 'legacyVendors'];
-
 function chunk<T>(items: T[], size: number) {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
@@ -114,7 +112,6 @@ export default function AdminTools() {
   const [clientsFile, setClientsFile] = useState<File | null>(null);
   const [receivablesFile, setReceivablesFile] = useState<File | null>(null);
   const [payablesFile, setPayablesFile] = useState<File | null>(null);
-  const [vendorsFile, setVendorsFile] = useState<File | null>(null);
   const [summaryFile, setSummaryFile] = useState<File | null>(null);
   const [clearBeforeImport, setClearBeforeImport] = useState(true);
 
@@ -169,29 +166,33 @@ export default function AdminTools() {
     clients: clientsFile?.name || 'Nenhum arquivo',
     receivables: receivablesFile?.name || 'Nenhum arquivo',
     payables: payablesFile?.name || 'Nenhum arquivo',
-    vendors: vendorsFile?.name || 'Nenhum arquivo',
     summary: summaryFile?.name || 'Nenhum arquivo',
-  }), [productsFile, clientsFile, receivablesFile, payablesFile, vendorsFile, summaryFile]);
+  }), [productsFile, clientsFile, receivablesFile, payablesFile, summaryFile]);
+
+  const buildImportMap = (products: any[], clients: any[], accountsReceivable: any[], accountsPayable: any[]) => {
+    const map: Array<{ collectionName: string; records: any[] }> = [];
+    if (products.length > 0) map.push({ collectionName: 'products', records: products });
+    if (clients.length > 0) map.push({ collectionName: 'clients', records: clients });
+    if (accountsReceivable.length > 0) map.push({ collectionName: 'accountsReceivable', records: accountsReceivable });
+    if (accountsPayable.length > 0) map.push({ collectionName: 'accountsPayable', records: accountsPayable });
+    return map;
+  };
 
   const importLegacyData = async () => {
     try {
       setLoading(true);
 
-      const [products, clients, accountsReceivable, accountsPayable, vendors, summary] = await Promise.all([
+      const [products, clients, accountsReceivable, accountsPayable, summary] = await Promise.all([
         readJsonFile(productsFile),
         readJsonFile(clientsFile),
         readJsonFile(receivablesFile),
         readJsonFile(payablesFile),
-        readJsonFile(vendorsFile),
         summaryFile ? summaryFile.text().then((txt) => JSON.parse(txt)) : Promise.resolve(null),
       ]);
 
-      const totalRecords =
-        products.length +
-        clients.length +
-        accountsReceivable.length +
-        accountsPayable.length +
-        vendors.length;
+      const importMap = buildImportMap(products, clients, accountsReceivable, accountsPayable);
+
+      const totalRecords = importMap.reduce((sum, entry) => sum + entry.records.length, 0);
 
       if (totalRecords === 0) {
         toast.error('Nenhum JSON válido foi selecionado para importar.');
@@ -199,16 +200,9 @@ export default function AdminTools() {
       }
 
       if (clearBeforeImport) {
-        await deleteCollections(IMPORT_COLLECTIONS);
+        const collectionsToClear = importMap.map((entry) => entry.collectionName);
+        await deleteCollections(collectionsToClear);
       }
-
-      const importMap: Array<{ collectionName: string; records: any[] }> = [
-        { collectionName: 'products', records: products },
-        { collectionName: 'clients', records: clients },
-        { collectionName: 'accountsReceivable', records: accountsReceivable },
-        { collectionName: 'accountsPayable', records: accountsPayable },
-        { collectionName: 'legacyVendors', records: vendors },
-      ];
 
       let written = 0;
 
@@ -236,11 +230,15 @@ export default function AdminTools() {
 
       if (summary) {
         const batch = writeBatch(db);
-        batch.set(doc(db, 'settings', 'legacyImportSummary'), convertValue(summary));
+        batch.set(doc(db, 'settings', 'legacyImportSummary'), convertValue(summary), { merge: true });
         await batch.commit();
       }
 
-      toast.success(`Importação concluída com sucesso. ${written} registro(s) importado(s). Usuários atuais preservados.`);
+      const clearedText = clearBeforeImport
+        ? `Coleções limpas: ${importMap.map((entry) => entry.collectionName).join(', ')}.`
+        : 'Sem limpeza prévia.';
+
+      toast.success(`Importação concluída com sucesso. ${written} registro(s) importado(s). ${clearedText}`);
     } catch (error) {
       console.error('Error importing legacy data:', error);
       toast.error('Erro ao importar os dados do legado.');
@@ -264,9 +262,9 @@ export default function AdminTools() {
             <div className="flex items-start gap-4">
               <ShieldCheck className="w-6 h-6 text-emerald-400 flex-shrink-0 mt-1" />
               <div>
-                <h3 className="text-lg font-semibold text-emerald-400 mb-2">Proteção de acesso</h3>
+                <h3 className="text-lg font-semibold text-emerald-400 mb-2">Importação segura</h3>
                 <p className="text-white/80">
-                  Esta versão do importador <strong>não apaga a coleção users</strong>. Os vendedores do sistema legado são importados para <code className="text-emerald-300">legacyVendors</code>, preservando seu acesso atual ao sistema.
+                  Esta versão limpa <strong>apenas as coleções correspondentes aos arquivos selecionados</strong>. Se você importar só produtos, só a coleção <code className="text-emerald-300">products</code> será apagada antes.
                 </p>
               </div>
             </div>
@@ -280,7 +278,7 @@ export default function AdminTools() {
               Importar dados do sistema legado
             </CardTitle>
             <CardDescription className="text-white/70">
-              Envie os arquivos JSON recuperados do sistema antigo. Produtos, clientes e cobranças serão importados para o Firestore. Os usuários atuais serão preservados.
+              Envie apenas os arquivos JSON que deseja importar. O sistema limpará somente as coleções correspondentes aos arquivos enviados.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -290,7 +288,6 @@ export default function AdminTools() {
                 ['Clientes (clients.json)', setClientsFile, importSummary.clients],
                 ['Contas a Receber (accountsReceivable.json)', setReceivablesFile, importSummary.receivables],
                 ['Contas a Pagar (accountsPayable.json)', setPayablesFile, importSummary.payables],
-                ['Vendedores (vendors.json)', setVendorsFile, importSummary.vendors],
                 ['Resumo (summary.json) - opcional', setSummaryFile, importSummary.summary],
               ].map(([label, setter, fileName]) => (
                 <div key={label as string} className="space-y-2">
@@ -318,7 +315,7 @@ export default function AdminTools() {
                 className="h-4 w-4"
               />
               <label htmlFor="clearBeforeImport" className="text-sm text-white/90">
-                Limpar antes as coleções de destino (<code>products</code>, <code>clients</code>, <code>accountsReceivable</code>, <code>accountsPayable</code>, <code>legacyVendors</code>)
+                Limpar antes somente as coleções correspondentes aos arquivos selecionados
               </label>
             </div>
 
@@ -349,7 +346,6 @@ export default function AdminTools() {
                   setClientsFile(null);
                   setReceivablesFile(null);
                   setPayablesFile(null);
-                  setVendorsFile(null);
                   setSummaryFile(null);
                 }}
                 className="border-white/20 text-white hover:bg-white/10"
@@ -360,12 +356,11 @@ export default function AdminTools() {
             </div>
 
             <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-white/70">
-              <p className="font-semibold text-white mb-2">Como esta importação funciona</p>
+              <p className="font-semibold text-white mb-2">Exemplos</p>
               <ul className="space-y-1 list-disc ml-5">
-                <li>Produtos serão importados com estoque, preço de compra, preço de venda e código.</li>
-                <li>Clientes serão importados com nome, documento, telefone e saldo legado.</li>
-                <li>Contas a receber em aberto serão importadas para <code>accountsReceivable</code>. Os 351 registros recuperados mostram cada cobrança como pendente com saldo atual. </li>
-                <li>Os vendedores recuperados serão importados em <code>legacyVendors</code>, preservando os usuários atuais.</li>
+                <li>Selecionou só <code>products.json</code> → apaga só <code>products</code>.</li>
+                <li>Selecionou <code>clients.json</code> e <code>accountsReceivable.json</code> → apaga só <code>clients</code> e <code>accountsReceivable</code>.</li>
+                <li>Não mexe em <code>users</code> nem em coleções que você não selecionou.</li>
               </ul>
             </div>
           </CardContent>
@@ -378,7 +373,7 @@ export default function AdminTools() {
               <div>
                 <h3 className="text-lg font-semibold text-red-400 mb-2">⚠️ Zona de Perigo</h3>
                 <p className="text-white/80">
-                  As ações abaixo são <strong>irreversíveis</strong>. Esta versão preserva seus usuários atuais, mas pode apagar dados operacionais do sistema.
+                  As ações abaixo são <strong>irreversíveis</strong>. Esta versão continua preservando seus usuários atuais.
                 </p>
               </div>
             </div>
