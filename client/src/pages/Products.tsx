@@ -98,8 +98,8 @@ export default function Products() {
     }
 
     return {
-      categoryId: resolvedCategory.categoryId || '',
-      categoryName: resolvedCategory.categoryName || '',
+      categoryId: product?.categoryId || '',
+      categoryName: product?.categoryName || product?.family || '',
     };
   };
 
