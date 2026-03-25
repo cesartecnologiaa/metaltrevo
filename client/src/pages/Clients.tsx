@@ -114,7 +114,7 @@ export default function Clients() {
     const search = term.trim().toLowerCase();
     const numericSearch = term.replace(/[^\d]/g, '');
 
-    if (!search && !numericSearch) return true;
+    if (!search) return false;
 
     const haystacks = [
       getClientDisplayName(client).toLowerCase(),
@@ -124,12 +124,18 @@ export default function Clients() {
     ];
 
     const matchesText = haystacks.some((value) => value.includes(search));
-    const matchesNumeric = [
+
+    const numericFields = [
       getClientDocument(client).replace(/[^\d]/g, ''),
       String(client?.phone || '').replace(/[^\d]/g, ''),
-    ].some((value) => value.includes(numericSearch));
+      String(client?.code || client?.legacyCode || '').replace(/[^\d]/g, ''),
+    ];
 
-    return search ? (matchesText || matchesNumeric) : matchesNumeric;
+    const matchesNumeric = numericSearch
+      ? numericFields.some((value) => value.includes(numericSearch))
+      : false;
+
+    return matchesText || matchesNumeric;
   };
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -375,18 +381,20 @@ export default function Clients() {
   }, [clients, searchTerm, filterStatus]);
 
   const visibleClients = useMemo(() => {
+    if (!searchTerm.trim()) return [];
+
     const ordered = [...filteredClients].sort((a: any, b: any) => {
-      const dateA = a?.createdAt?.toDate?.() || (a?.createdAt ? new Date(a.createdAt) : null);
-      const dateB = b?.createdAt?.toDate?.() || (b?.createdAt ? new Date(b.createdAt) : null);
+      const dateA = a?.createdAt?.toDate?.() || ((a?.createdAt) ? new Date(a.createdAt) : null);
+      const dateB = b?.createdAt?.toDate?.() || ((b?.createdAt) ? new Date(b.createdAt) : null);
 
       if (dateA && !isNaN(dateA.getTime()) && dateB && !isNaN(dateB.getTime())) {
         return dateB.getTime() - dateA.getTime();
       }
 
-      return String(b?.code || b?.legacyCode || '').localeCompare(String(a?.code || a?.legacyCode || ''));
+      return String(a?.name || a?.code || '').localeCompare(String(b?.name || b?.code || ''));
     });
 
-    return searchTerm.trim() ? ordered.slice(0, 50) : ordered.slice(0, 5);
+    return ordered.slice(0, 50);
   }, [filteredClients, searchTerm]);
 
   const visibleClientIdsKey = useMemo(() => {
@@ -518,7 +526,7 @@ export default function Clients() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/50 w-5 h-5" />
               <Input
                 type="text"
-                placeholder="Nome, código, CPF/CNPJ, e-mail, telefone..."
+                placeholder="Digite nome, código, CPF/CNPJ, telefone ou e-mail..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 bg-white/5 border-white/20 text-white placeholder:text-white/50"
@@ -553,11 +561,17 @@ export default function Clients() {
         <div className="text-center py-12 text-white/70">
           Carregando clientes...
         </div>
+      ) : !searchTerm.trim() ? (
+        <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-12 text-center">
+          <Users className="w-16 h-16 mx-auto mb-4 text-white/30" />
+          <p className="text-white/70 text-lg">Pesquise para localizar um cliente</p>
+          <p className="text-white/50 text-sm mt-2">Digite nome, código, CPF/CNPJ, telefone ou e-mail para buscar.</p>
+        </Card>
       ) : filteredClients.length === 0 ? (
         <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-12 text-center">
           <Users className="w-16 h-16 mx-auto mb-4 text-white/30" />
           <p className="text-white/70 text-lg">Nenhum cliente encontrado</p>
-          <p className="text-white/50 text-sm mt-2">Use a busca para localizar clientes importados ou cadastre um novo cliente.</p>
+          <p className="text-white/50 text-sm mt-2">Tente buscar pelo código, nome, CPF/CNPJ, telefone ou e-mail.</p>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
