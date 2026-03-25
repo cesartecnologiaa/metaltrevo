@@ -20,6 +20,7 @@ import {
 } from '@/services/categoryService';
 import { getAllProducts } from '@/services/productService';
 import { usePermissions } from '@/hooks/usePermissions';
+import Layout from '@/components/Layout';
 
 export default function Categories() {
   const permissions = usePermissions();

@@ -25,6 +25,7 @@ import {
   formatPhone 
 } from '@/lib/validators';
 import { usePermissions } from '@/hooks/usePermissions';
+import Layout from '@/components/Layout';
 
 export default function Suppliers() {
   const permissions = usePermissions();
@@ -242,7 +243,8 @@ export default function Suppliers() {
   });
 
   return (
-    <div className="space-y-6">
+    <Layout>
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -609,6 +611,7 @@ export default function Suppliers() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </div>
+    </Layout>
   );
 }
