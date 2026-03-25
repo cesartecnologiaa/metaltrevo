@@ -18,6 +18,7 @@ import { safeToDate, formatDateTime } from '@/lib/firestoreUtils';
 import { formatCurrency } from '@/lib/formatters';
 import SaleReceipt from '@/components/SaleReceipt';
 import { usePrintReceipt } from '@/hooks/usePrintReceipt';
+import Layout from '@/components/Layout';
 
 export default function Sales() {
   const { userData } = useAuthContext();
@@ -250,7 +251,8 @@ export default function Sales() {
   };
 
   return (
-    <div className="space-y-6">
+    <Layout>
+      <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Gestão de Vendas</h1>
@@ -793,6 +795,7 @@ export default function Sales() {
           <SaleReceipt sale={selectedSale} />
         </div>
       )}
-    </div>
+      </div>
+    </Layout>
   );
 }

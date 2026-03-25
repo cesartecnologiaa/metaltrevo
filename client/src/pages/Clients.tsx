@@ -26,117 +26,14 @@ import {
 } from '@/lib/validators';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuthContext } from '@/contexts/AuthContext';
-import { useLocation } from 'wouter';
 import { formatCurrency } from '@/lib/formatters';
 import { formatDate as formatFirestoreDate } from '@/lib/firestoreUtils';
 import { getClientPendingBalance, getClientPendingInstallments, markInstallmentAsPaid } from '@/services/accountsReceivableService';
+import Layout from '@/components/Layout';
 
 export default function Clients() {
   const permissions = usePermissions();
   const { userData } = useAuthContext();
-  const [, setLocation] = useLocation();
-
-  const normalizeClient = (client: any): Client & any => {
-    const normalizedName = String(
-      client?.name ||
-      client?.fantasyName ||
-      client?.razaoSocial ||
-      client?.legacyName ||
-      ''
-    ).trim();
-
-    const normalizedCode = String(client?.code || client?.legacyCode || '').trim();
-    const normalizedCpfCnpj = String(client?.cpfCnpj || client?.document || '').trim();
-    const normalizedPhone = String(client?.phone || client?.whatsapp || '').trim();
-    const normalizedEmail = String(client?.email || '').trim();
-
-    const address = client?.address
-      ? {
-          street: String(client.address?.street || '').trim(),
-          number: String(client.address?.number || '').trim(),
-          complement: String(client.address?.complement || '').trim(),
-          neighborhood: String(client.address?.neighborhood || '').trim(),
-          city: String(client.address?.city || '').trim(),
-          state: String(client.address?.state || '').trim(),
-          zipCode: String(client.address?.zipCode || '').trim(),
-        }
-      : undefined;
-
-    return {
-      ...client,
-      name: normalizedName,
-      code: normalizedCode,
-      legacyCode: normalizedCode || String(client?.legacyCode || '').trim(),
-      cpfCnpj: normalizedCpfCnpj,
-      email: normalizedEmail,
-      phone: normalizedPhone,
-      active: client?.active !== false,
-      address,
-      legacyOpenAmount: Number(client?.legacyOpenAmount || 0),
-      legacyTotalSales: Number(client?.legacyTotalSales || 0),
-    };
-  };
-
-  const getClientDisplayName = (client: any) => {
-    const name = String(client?.name || '').trim();
-    const code = String(client?.code || client?.legacyCode || '').trim();
-    return name || code || 'Cliente sem nome';
-  };
-
-  const getClientDocument = (client: any) => {
-    return String(client?.cpfCnpj || client?.document || '').trim();
-  };
-
-  const getClientAddressLabel = (client: any) => {
-    const parts = [
-      client?.address?.street,
-      client?.address?.city,
-      client?.address?.state,
-    ]
-      .map((value: any) => String(value || '').trim())
-      .filter(Boolean);
-
-    return parts.join(' - ');
-  };
-
-  const hasMeaningfulClientData = (client: any) => {
-    return Boolean(
-      String(client?.name || '').trim() ||
-      String(client?.code || client?.legacyCode || '').trim() ||
-      String(client?.cpfCnpj || '').trim() ||
-      String(client?.phone || '').trim() ||
-      String(client?.email || '').trim() ||
-      String(client?.address?.street || '').trim()
-    );
-  };
-
-  const matchesClientSearch = (client: any, term: string) => {
-    const search = term.trim().toLowerCase();
-    const numericSearch = term.replace(/[^\d]/g, '');
-
-    if (!search) return false;
-
-    const haystacks = [
-      getClientDisplayName(client).toLowerCase(),
-      String(client?.code || client?.legacyCode || '').toLowerCase(),
-      String(client?.email || '').toLowerCase(),
-      getClientAddressLabel(client).toLowerCase(),
-    ];
-
-    const matchesText = haystacks.some((value) => value.includes(search));
-
-    const numericFields = [
-      getClientDocument(client).replace(/[^\d]/g, ''),
-      String(client?.phone || '').replace(/[^\d]/g, ''),
-      String(client?.code || client?.legacyCode || '').replace(/[^\d]/g, ''),
-    ];
-
-    const matchesNumeric = numericSearch
-      ? numericFields.some((value) => value.includes(numericSearch))
-      : false;
-
-    return matchesText || matchesNumeric;
-  };
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -182,8 +79,7 @@ export default function Clients() {
     setLoading(true);
     try {
       const clientsData = await getAllClients();
-      const normalizedClients = (clientsData || []).map((client: any) => normalizeClient(client)).filter(hasMeaningfulClientData);
-      setClients(normalizedClients);
+      setClients(clientsData);
     } catch (error) {
       console.error('Error loading clients:', error);
       toast.error('Erro ao carregar clientes');
@@ -194,20 +90,19 @@ export default function Clients() {
 
   const handleOpenDialog = (client?: Client) => {
     if (client) {
-      const normalizedClient = normalizeClient(client as any);
-      setEditingClient(normalizedClient);
+      setEditingClient(client);
       setFormData({
-        name: normalizedClient.name,
-        cpfCnpj: normalizedClient.cpfCnpj,
-        email: normalizedClient.email || '',
-        phone: normalizedClient.phone || '',
-        street: normalizedClient.address?.street || '',
-        number: normalizedClient.address?.number || '',
-        complement: normalizedClient.address?.complement || '',
-        neighborhood: normalizedClient.address?.neighborhood || '',
-        city: normalizedClient.address?.city || '',
-        state: normalizedClient.address?.state || '',
-        zipCode: normalizedClient.address?.zipCode || '',
+        name: client.name,
+        cpfCnpj: client.cpfCnpj,
+        email: client.email || '',
+        phone: client.phone || '',
+        street: client.address?.street || '',
+        number: client.address?.number || '',
+        complement: client.address?.complement || '',
+        neighborhood: client.address?.neighborhood || '',
+        city: client.address?.city || '',
+        state: client.address?.state || '',
+        zipCode: client.address?.zipCode || '',
       });
     } else {
       setEditingClient(null);
@@ -366,10 +261,12 @@ export default function Clients() {
   };
 
   const filteredClients = useMemo(() => {
-    return clients.filter((client) => {
-      if (!hasMeaningfulClientData(client)) return false;
-
-      const matchesSearch = matchesClientSearch(client, searchTerm);
+    return clients.filter(client => {
+      const matchesSearch =
+        client?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        client?.cpfCnpj?.includes(searchTerm.replace(/[^\d]/g, '')) ||
+        (client?.email && client.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (client?.phone && client.phone.includes(searchTerm.replace(/[^\d]/g, '')));
 
       const matchesStatus =
         filterStatus === 'all' ||
@@ -381,20 +278,7 @@ export default function Clients() {
   }, [clients, searchTerm, filterStatus]);
 
   const visibleClients = useMemo(() => {
-    if (!searchTerm.trim()) return [];
-
-    const ordered = [...filteredClients].sort((a: any, b: any) => {
-      const dateA = a?.createdAt?.toDate?.() || ((a?.createdAt) ? new Date(a.createdAt) : null);
-      const dateB = b?.createdAt?.toDate?.() || ((b?.createdAt) ? new Date(b.createdAt) : null);
-
-      if (dateA && !isNaN(dateA.getTime()) && dateB && !isNaN(dateB.getTime())) {
-        return dateB.getTime() - dateA.getTime();
-      }
-
-      return String(a?.name || a?.code || '').localeCompare(String(b?.name || b?.code || ''));
-    });
-
-    return ordered.slice(0, 50);
+    return filteredClients.slice(0, searchTerm.trim() ? 20 : 12);
   }, [filteredClients, searchTerm]);
 
   const visibleClientIdsKey = useMemo(() => {
@@ -481,7 +365,7 @@ export default function Clients() {
     const paymentKey = `${accountId}-${installmentNumber}`;
     setProcessingPaymentId(paymentKey);
     try {
-      await markInstallmentAsPaid(accountId, installmentNumber, userData.uid || '', userData.name || 'Usuário');
+      await markInstallmentAsPaid(accountId, installmentNumber, userData.uid, userData.name);
       toast.success('Parcela marcada como paga');
 
       if (selectedPendingClient) {
@@ -501,7 +385,8 @@ export default function Clients() {
   };
 
   return (
-    <div className="space-y-6">
+    <Layout>
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -526,7 +411,7 @@ export default function Clients() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/50 w-5 h-5" />
               <Input
                 type="text"
-                placeholder="Digite nome, código, CPF/CNPJ, telefone ou e-mail..."
+                placeholder="Nome, CPF/CNPJ, e-mail ou telefone..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 bg-white/5 border-white/20 text-white placeholder:text-white/50"
@@ -551,27 +436,15 @@ export default function Clients() {
       </Card>
 
       {/* Lista de Clientes */}
-      {!loading && !searchTerm.trim() && filteredClients.length > 5 && (
-        <p className="text-white/60 text-sm">
-          Mostrando apenas os 5 clientes mais recentes. Use a busca para localizar os demais.
-        </p>
-      )}
-
       {loading ? (
         <div className="text-center py-12 text-white/70">
           Carregando clientes...
         </div>
-      ) : !searchTerm.trim() ? (
-        <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-12 text-center">
-          <Users className="w-16 h-16 mx-auto mb-4 text-white/30" />
-          <p className="text-white/70 text-lg">Pesquise para localizar um cliente</p>
-          <p className="text-white/50 text-sm mt-2">Digite nome, código, CPF/CNPJ, telefone ou e-mail para buscar.</p>
-        </Card>
       ) : filteredClients.length === 0 ? (
         <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-12 text-center">
           <Users className="w-16 h-16 mx-auto mb-4 text-white/30" />
           <p className="text-white/70 text-lg">Nenhum cliente encontrado</p>
-          <p className="text-white/50 text-sm mt-2">Tente buscar pelo código, nome, CPF/CNPJ, telefone ou e-mail.</p>
+          <p className="text-white/50 text-sm mt-2">Cadastre seu primeiro cliente para começar</p>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -585,13 +458,10 @@ export default function Clients() {
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
-                  <h3 className="text-white font-bold text-lg">{getClientDisplayName(client)}</h3>
+                  <h3 className="text-white font-bold text-lg">{client.name}</h3>
                   <p className="text-white/50 text-sm">
-                    {getClientDocument(client) ? formatCpfCnpj(getClientDocument(client)) : 'Sem documento'}
+                    {formatCpfCnpj(client.cpfCnpj)}
                   </p>
-                  {(client.code || client.legacyCode) && (
-                    <p className="text-white/35 text-xs mt-1">Código: {client.code || client.legacyCode}</p>
-                  )}
                 </div>
                 {!client.active && (
                   <span className="px-2 py-1 rounded-md bg-red-500/20 text-red-300 text-xs">
@@ -629,51 +499,31 @@ export default function Clients() {
                 {client.phone && (
                   <div className="flex items-center gap-2 text-white/70 text-sm">
                     <Phone className="w-4 h-4" />
-                    <span>{client.phone ? formatPhone(client.phone) : 'Sem telefone'}</span>
+                    <span>{formatPhone(client.phone)}</span>
                   </div>
                 )}
                 {client.address && (
                   <div className="flex items-start gap-2 text-white/70 text-sm">
                     <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
                     <span className="line-clamp-2">
-                      {getClientAddressLabel(client) || 'Endereço não informado'}
+                      {client.address.city}, {client.address.state}
                     </span>
                   </div>
                 )}
               </div>
 
-              {Number(client.legacyOpenAmount || 0) > 0 && (
-                <div className="mb-4 rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-white/70">
-                  <div>
-                    Débitos pendentes: <span className="font-semibold text-yellow-300">R$ {formatCurrency(Number(client.legacyOpenAmount || 0))}</span>
-                  </div>
-                </div>
-              )}
-
               {/* Ações */}
               <div className="space-y-2">
                 {hasPending && (
-                  <>
-                    <Button
-                      onClick={() => openPendingDialog(client)}
-                      variant="outline"
-                      size="sm"
-                      className="w-full border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
-                    >
-                      <DollarSign className="w-4 h-4 mr-2" />
-                      Ver pendências / Dar baixa
-                    </Button>
-
-                    <Button
-                      onClick={() => setLocation(`/contas-receber?cliente=${encodeURIComponent(String(client.id))}`)}
-                      variant="outline"
-                      size="sm"
-                      className="w-full border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10"
-                    >
-                      <Search className="w-4 h-4 mr-2" />
-                      Abrir em Contas a Receber
-                    </Button>
-                  </>
+                  <Button
+                    onClick={() => openPendingDialog(client)}
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
+                  >
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Ver pendências / Dar baixa
+                  </Button>
                 )}
 
                 <div className="flex gap-2">
@@ -1011,6 +861,7 @@ export default function Clients() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </div>
+    </Layout>
   );
 }
