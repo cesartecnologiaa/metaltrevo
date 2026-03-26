@@ -316,6 +316,17 @@ export default function AccountsReceivable() {
     ? roundMoney(typedPaymentAmount - currentInstallmentAmount)
     : 0;
 
+
+  const getDisplaySaleNumber = (account: any) => {
+    if (account?.legacyAccountCode) return String(account.legacyAccountCode);
+    if (account?.clientCode) return String(account.clientCode);
+
+    const saleNumber = String(account?.saleNumber || '');
+    return saleNumber.startsWith('LEGACY-')
+      ? saleNumber.replace(/^LEGACY-/, '')
+      : saleNumber;
+  };
+
   const filteredAccounts = useMemo(() => {
     let filtered = filterAccountsByDate(accounts);
     if (!searchTerm) return filtered;
@@ -323,21 +334,9 @@ export default function AccountsReceivable() {
     return filtered.filter(account => (
       account?.clientName?.toLowerCase().includes(search) ||
       account?.clientDocument?.replace(/[^\d]/g, '').includes(search.replace(/[^\d]/g, '')) ||
-      account?.saleNumber?.toLowerCase().includes(search)
+      getDisplaySaleNumber(account).toLowerCase().includes(search)
     ));
   }, [accounts, quickFilter, searchTerm]);
-
-  const visibleAccounts = useMemo(() => {
-    if (searchTerm.trim()) return filteredAccounts;
-
-    const sorted = [...filteredAccounts].sort((a, b) => {
-      const dateA = a?.createdAt?.toDate?.() || new Date(a?.createdAt || 0);
-      const dateB = b?.createdAt?.toDate?.() || new Date(b?.createdAt || 0);
-      return dateB.getTime() - dateA.getTime();
-    });
-
-    return sorted.slice(0, 5);
-  }, [filteredAccounts, searchTerm]);
 
   return (
     <Layout>
@@ -359,12 +358,6 @@ export default function AccountsReceivable() {
             />
           </div>
         </Card>
-
-        {!searchTerm.trim() && filteredAccounts.length > 5 && (
-          <p className="text-white/60 text-sm">
-            Mostrando apenas as 5 contas mais recentes. Use a busca para localizar as demais.
-          </p>
-        )}
 
         <div className="flex gap-2 flex-wrap">
           {[
@@ -428,19 +421,19 @@ export default function AccountsReceivable() {
 
         {loading ? (
           <div className="text-center py-12 text-white/70">Carregando contas...</div>
-        ) : visibleAccounts.length === 0 ? (
+        ) : filteredAccounts.length === 0 ? (
           <Card className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-12 text-center">
             <DollarSign className="w-16 h-16 mx-auto mb-4 text-white/30" />
             <p className="text-white/70 text-lg">Nenhuma conta a receber</p>
           </Card>
         ) : (
           <div className="space-y-4">
-            {visibleAccounts.map((account) => (
+            {filteredAccounts.map((account) => (
               <Card key={account.id} className="backdrop-blur-2xl bg-white/10 border-white/20 shadow-2xl p-5 hover:border-white/40 transition-all">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-white font-bold text-lg">#{account.saleNumber}</h3>
+                      <h3 className="text-white font-bold text-lg">#{getDisplaySaleNumber(account)}</h3>
                       <span className={`px-3 py-1 rounded-md text-xs font-semibold border ${getStatusColor(account.status)}`}>
                         {getStatusLabel(account.status)}
                       </span>
@@ -497,7 +490,7 @@ export default function AccountsReceivable() {
           <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
             <DialogContent className="max-w-3xl backdrop-blur-2xl bg-gradient-to-br from-blue-900/95 to-cyan-900/95 border-white/20 max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="text-2xl font-bold text-white">Detalhes da Conta #{selectedAccount.saleNumber}</DialogTitle>
+                <DialogTitle className="text-2xl font-bold text-white">Detalhes da Conta #{getDisplaySaleNumber(selectedAccount)}</DialogTitle>
                 <DialogDescription className="text-white/70">
                   Visualize as parcelas e registre pagamentos completos, parciais ou com valor excedente.
                 </DialogDescription>
