@@ -5,6 +5,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider, useAuthContext } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import LoadingScreen from "./components/LoadingScreen";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import PDV from "./pages/PDV";
@@ -30,25 +31,16 @@ import NotFound from "./pages/NotFound";
 function AppRoutes() {
   const { currentUser, userData, loading } = useAuthContext();
 
-  // Mostrar loading enquanto verifica autenticação
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white/70">Carregando...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen message="Carregando..." />;
   }
 
-  // Redirecionar automaticamente por perfil após login
   const getDefaultRoute = () => {
     if (!userData) return '/';
-    
+
     switch (userData.role) {
       case 'admin':
-        return '/'; // Dashboard (Home)
+        return '/';
       case 'vendedor':
         return '/pdv';
       case 'deposito':
@@ -60,12 +52,10 @@ function AppRoutes() {
 
   return (
     <Switch>
-      {/* Rota de Login */}
       <Route path="/login">
         {currentUser && userData ? <Redirect to={getDefaultRoute()} /> : <Login />}
       </Route>
 
-      {/* Rotas Protegidas */}
       <Route path="/pdv">
         <ProtectedRoute allowedRoles={['admin', 'vendedor', 'caixa']}>
           <PDV />
@@ -174,17 +164,14 @@ function AppRoutes() {
         </ProtectedRoute>
       </Route>
 
-      {/* Rota 404 */}
       <Route path="/404" component={NotFound} />
 
-      {/* Rota Home (deve ficar antes do fallback) */}
       <Route path="/">
         <ProtectedRoute>
           <Home />
         </ProtectedRoute>
       </Route>
 
-      {/* Fallback - Redireciona para 404 */}
       <Route>
         <NotFound />
       </Route>
