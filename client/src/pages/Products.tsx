@@ -9,8 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { exportProductsToPDF, exportStockToExcel } from '@/lib/exportUtils';
+import jsPDF from 'jspdf';
+import * as XLSX from 'xlsx';
 import { formatCurrency } from '@/lib/formatters';
+import { addPDFHeader, addPDFFooter } from '@/utils/pdfHeader';
 import { Product } from '@/types';
 import {
   getAllProducts,
@@ -24,10 +26,12 @@ import { getAllCategories } from '@/services/categoryService';
 import { uploadProductImage } from '@/services/storageService';
 import { Category } from '@/types';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useCompanySettings } from '@/hooks/useCompanySettings';
 import Layout from '@/components/Layout';
 
 export default function Products() {
   const permissions = usePermissions();
+  const { settings } = useCompanySettings();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -256,6 +260,168 @@ export default function Products() {
     return matchesCategory && matchesStatus;
   });
 
+
+  const getExportProducts = () => {
+    return visibleProducts.map((product: any) => ({
+      ...product,
+      currentStock: Number(product?.currentStock ?? product?.stock ?? 0),
+      minStock: Number(product?.minStock ?? 0),
+      cashPrice: Number(product?.cashPrice ?? product?.salePrice ?? product?.price ?? 0),
+      creditPrice: Number(product?.creditPrice ?? product?.salePrice ?? product?.price ?? 0),
+      costPrice: Number(product?.costPrice ?? product?.purchasePrice ?? 0),
+    }));
+  };
+
+  const handleExportProductsPDF = async () => {
+    const exportList = getExportProducts();
+
+    if (exportList.length === 0) {
+      toast.error('Nenhum produto filtrado para exportar');
+      return;
+    }
+
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      let y = await addPDFHeader(
+        doc,
+        settings,
+        'Relatório de Produtos',
+        `Filtros: ${searchTerm ? `Busca "${searchTerm}"` : 'Sem busca'} | Categoria: ${filterCategory === 'all' ? 'Todas' : (categories.find(c => c.id === filterCategory)?.name || 'Todas')} | Status: ${filterStatus === 'all' ? 'Todos' : filterStatus === 'active' ? 'Ativos' : 'Inativos'}`
+      );
+
+      const totalItems = exportList.length;
+      const totalStock = exportList.reduce((sum, product) => sum + Number(product.currentStock || 0), 0);
+      const totalCost = exportList.reduce((sum, product) => sum + (Number(product.costPrice || 0) * Number(product.currentStock || 0)), 0);
+      const totalSale = exportList.reduce((sum, product) => sum + (Number(product.cashPrice || 0) * Number(product.currentStock || 0)), 0);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text(`Produtos listados: ${totalItems}`, 14, y);
+      doc.text(`Estoque total: ${totalStock.toLocaleString('pt-BR')}`, 82, y);
+      y += 8;
+
+      doc.setFillColor(235, 242, 255);
+      doc.rect(14, y, 182, 10, 'F');
+      doc.setTextColor(20, 20, 20);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text('Código', 16, y + 6.5);
+      doc.text('Produto', 34, y + 6.5);
+      doc.text('Categoria', 108, y + 6.5);
+      doc.text('Estoque', 143, y + 6.5);
+      doc.text('À Vista', 160, y + 6.5);
+      doc.text('Custo', 181, y + 6.5, { align: 'right' });
+      y += 12;
+
+      exportList.forEach((product, index) => {
+        if (y > 272) {
+          addPDFFooter(doc);
+          doc.addPage();
+          y = 20;
+        }
+
+        const codeLabel = String(product.code || '-');
+        const nameLabel = String(product.name || 'Produto sem nome');
+        const categoryLabel = String(product.categoryName || 'Sem categoria');
+        const stockLabel = Number(product.currentStock || 0).toLocaleString('pt-BR');
+        const cashLabel = formatCurrency(Number(product.cashPrice || 0));
+        const costLabel = formatCurrency(Number(product.costPrice || 0));
+
+        if (index % 2 === 0) {
+          doc.setFillColor(248, 250, 252);
+          doc.rect(14, y - 4, 182, 9, 'F');
+        }
+
+        doc.setTextColor(25, 25, 25);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.text(codeLabel, 16, y);
+        doc.text(nameLabel.length > 38 ? `${nameLabel.slice(0, 38)}...` : nameLabel, 34, y);
+        doc.text(categoryLabel.length > 20 ? `${categoryLabel.slice(0, 20)}...` : categoryLabel, 108, y);
+        doc.text(stockLabel, 143, y);
+        doc.text(cashLabel, 160, y);
+        doc.text(costLabel, 181, y, { align: 'right' });
+
+        y += 9;
+      });
+
+      y += 4;
+      if (y > 270) {
+        addPDFFooter(doc);
+        doc.addPage();
+        y = 20;
+      }
+
+      doc.setDrawColor(200, 200, 200);
+      doc.line(14, y, 196, y);
+      y += 8;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text(`Valor de custo em estoque: ${formatCurrency(totalCost)}`, 14, y);
+      y += 6;
+      doc.text(`Valor de venda à vista em estoque: ${formatCurrency(totalSale)}`, 14, y);
+
+      addPDFFooter(doc);
+      doc.save('relatorio-produtos-filtrados.pdf');
+      toast.success('PDF gerado com sucesso!');
+    } catch (error) {
+      console.error('Error exporting products PDF:', error);
+      toast.error('Erro ao gerar PDF');
+    }
+  };
+
+  const handleExportProductsExcel = () => {
+    const exportList = getExportProducts();
+
+    if (exportList.length === 0) {
+      toast.error('Nenhum produto filtrado para exportar');
+      return;
+    }
+
+    try {
+      const data = exportList.map((product: any) => ({
+        'Código': String(product.code || ''),
+        'Produto': String(product.name || ''),
+        'Descrição': String(product.description || ''),
+        'Categoria': String(product.categoryName || 'Sem categoria'),
+        'Estoque Atual': Number(product.currentStock || 0),
+        'Estoque Mínimo': Number(product.minStock || 0),
+        'Preço à Vista': Number(product.cashPrice || 0),
+        'Preço a Prazo': Number(product.creditPrice || 0),
+        'Preço de Custo': Number(product.costPrice || 0),
+        'Status': product.active === false ? 'Inativo' : 'Ativo',
+      }));
+
+      data.push({
+        'Código': '',
+        'Produto': '',
+        'Descrição': '',
+        'Categoria': 'TOTAL DE ITENS',
+        'Estoque Atual': exportList.reduce((sum, product) => sum + Number(product.currentStock || 0), 0),
+        'Estoque Mínimo': '',
+        'Preço à Vista': '',
+        'Preço a Prazo': '',
+        'Preço de Custo': '',
+        'Status': exportList.length,
+      } as any);
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Produtos');
+      XLSX.writeFile(wb, 'relatorio-produtos-filtrados.xlsx');
+      toast.success('Excel gerado com sucesso!');
+    } catch (error) {
+      console.error('Error exporting products Excel:', error);
+      toast.error('Erro ao gerar Excel');
+    }
+  };
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -266,7 +432,7 @@ export default function Products() {
           </div>
           <div className="flex gap-2">
             <Button
-              onClick={() => exportProductsToPDF(visibleProducts)}
+              onClick={handleExportProductsPDF}
               variant="outline"
               className="bg-white/5 border-white/20 text-white hover:bg-white/10"
             >
@@ -274,7 +440,7 @@ export default function Products() {
               PDF
             </Button>
             <Button
-              onClick={() => exportStockToExcel(visibleProducts)}
+              onClick={handleExportProductsExcel}
               variant="outline"
               className="bg-white/5 border-white/20 text-white hover:bg-white/10"
             >
