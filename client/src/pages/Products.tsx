@@ -260,38 +260,58 @@ export default function Products() {
     return matchesCategory && matchesStatus;
   });
 
+  const exportFilteredProducts = products.filter((product: any) => {
+    const search = searchTerm.trim().toLowerCase();
+    const productName = String(product?.name || '').toLowerCase();
+    const productCode = String(product?.code || '').toLowerCase();
 
-  const getExportProducts = () => {
-    return visibleProducts.map((product: any) => ({
-      ...product,
-      currentStock: Number(product?.currentStock ?? product?.stock ?? 0),
-      minStock: Number(product?.minStock ?? 0),
-      cashPrice: Number(product?.cashPrice ?? product?.salePrice ?? product?.price ?? 0),
-      creditPrice: Number(product?.creditPrice ?? product?.salePrice ?? product?.price ?? 0),
-      costPrice: Number(product?.costPrice ?? product?.purchasePrice ?? 0),
-    }));
-  };
+    const matchesSearch = !search || productName.includes(search) || productCode.includes(search);
+    const matchesCategory = filterCategory === 'all' || String(product?.categoryId || '') === filterCategory;
+    const matchesStatus =
+      filterStatus === 'all' ||
+      (filterStatus === 'active' && product.active) ||
+      (filterStatus === 'inactive' && !product.active);
+
+    return matchesSearch && matchesCategory && matchesStatus;
+  }).map((product: any) => ({
+    ...product,
+    currentStock: Number(product?.currentStock ?? product?.stock ?? 0),
+    minStock: Number(product?.minStock ?? product?.minimumStock ?? 0),
+    cashPrice: Number(product?.cashPrice ?? product?.salePrice ?? product?.price ?? 0),
+    creditPrice: Number(product?.creditPrice ?? product?.salePrice ?? product?.price ?? 0),
+    costPrice: Number(product?.costPrice ?? product?.purchasePrice ?? 0),
+  }));
+
+  const activeFilterParts = [
+    searchTerm.trim() ? `Busca: "${searchTerm.trim()}"` : null,
+    filterCategory !== 'all'
+      ? `Categoria: ${categories.find(c => c.id === filterCategory)?.name || 'Selecionada'}`
+      : null,
+    filterStatus !== 'all'
+      ? `Status: ${filterStatus === 'active' ? 'Ativos' : 'Inativos'}`
+      : null,
+  ].filter(Boolean);
+
+  const activeFiltersLabel = activeFilterParts.length
+    ? activeFilterParts.join(' | ')
+    : 'Sem filtros específicos';
 
   const handleExportProductsPDF = async () => {
-    const exportList = getExportProducts();
+    const exportList = exportFilteredProducts;
 
     if (exportList.length === 0) {
-      toast.error('Nenhum produto filtrado para exportar');
+      toast.error('Nenhum produto encontrado para os filtros selecionados');
       return;
     }
 
     try {
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
       let y = await addPDFHeader(
         doc,
         settings,
         'Relatório de Produtos',
-        `Filtros: ${searchTerm ? `Busca "${searchTerm}"` : 'Sem busca'} | Categoria: ${filterCategory === 'all' ? 'Todas' : (categories.find(c => c.id === filterCategory)?.name || 'Todas')} | Status: ${filterStatus === 'all' ? 'Todos' : filterStatus === 'active' ? 'Ativos' : 'Inativos'}`
+        activeFiltersLabel
       );
 
       const totalItems = exportList.length;
@@ -377,10 +397,10 @@ export default function Products() {
   };
 
   const handleExportProductsExcel = () => {
-    const exportList = getExportProducts();
+    const exportList = exportFilteredProducts;
 
     if (exportList.length === 0) {
-      toast.error('Nenhum produto filtrado para exportar');
+      toast.error('Nenhum produto encontrado para os filtros selecionados');
       return;
     }
 
@@ -397,19 +417,6 @@ export default function Products() {
         'Preço de Custo': Number(product.costPrice || 0),
         'Status': product.active === false ? 'Inativo' : 'Ativo',
       }));
-
-      data.push({
-        'Código': '',
-        'Produto': '',
-        'Descrição': '',
-        'Categoria': 'TOTAL DE ITENS',
-        'Estoque Atual': exportList.reduce((sum, product) => sum + Number(product.currentStock || 0), 0),
-        'Estoque Mínimo': '',
-        'Preço à Vista': '',
-        'Preço a Prazo': '',
-        'Preço de Custo': '',
-        'Status': exportList.length,
-      } as any);
 
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
