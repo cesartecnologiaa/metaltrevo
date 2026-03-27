@@ -5,7 +5,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider, useAuthContext } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
-import LoadingScreen from "./components/LoadingScreen";
+import LoadingScreen from "@/components/LoadingScreen";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import PDV from "./pages/PDV";
