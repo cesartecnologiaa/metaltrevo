@@ -30,6 +30,29 @@ export default function Reports() {
     const dateObj = date?.toDate ? date.toDate() : new Date(date);
     return isValid(dateObj) ? format(dateObj, formatStr) : '';
   };
+
+  const normalizeReportProduct = (product: any) => {
+    const currentStock = Number(product?.currentStock ?? product?.stock ?? 0);
+    const minStock = Number(product?.minStock ?? product?.minimumStock ?? 0);
+    const salePrice = Number(product?.salePrice ?? product?.cashPrice ?? product?.price ?? 0);
+    const costPrice = Number(product?.costPrice ?? product?.purchasePrice ?? 0);
+
+    return {
+      ...product,
+      currentStock,
+      stock: currentStock,
+      minStock,
+      price: salePrice,
+      salePrice,
+      cashPrice: Number(product?.cashPrice ?? salePrice),
+      creditPrice: Number(product?.creditPrice ?? salePrice),
+      costPrice,
+      purchasePrice: costPrice,
+      category: product?.categoryName || product?.category || 'Sem categoria',
+      categoryName: product?.categoryName || product?.category || 'Sem categoria',
+    };
+  };
+
   const [reportType, setReportType] = useState<ReportType>('sales');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -162,15 +185,15 @@ export default function Reports() {
 
   const generateProductsReport = async () => {
     const productsSnapshot = await getDocs(collection(db, 'products'));
-    const products = productsSnapshot.docs.map(doc => ({
+    const products = productsSnapshot.docs.map(doc => normalizeReportProduct({
       id: doc.id,
       ...doc.data(),
     }));
 
     const totalProducts = products.length;
-    const lowStockProducts = products.filter((p: any) => (p.currentStock || 0) < (p.minStock || 0)).length;
+    const lowStockProducts = products.filter((p: any) => Number(p.currentStock || 0) <= Number(p.minStock || 0)).length;
     const totalStockValue = products.reduce((sum: number, p: any) => {
-      return sum + ((p.currentStock || 0) * (p.salePrice || 0));
+      return sum + (Number(p.currentStock || 0) * Number(p.salePrice || p.cashPrice || p.price || 0));
     }, 0);
 
     setReportData(products);
@@ -411,13 +434,13 @@ export default function Reports() {
       });
     } else if (reportType === 'products') {
       const tableData = reportData.map((product: any) => [
-        product.code,
-        product.name,
-        product.category,
-        (product.currentStock || 0).toString(),
-        (product.minStock || 0).toString(),
-        formatCurrency(product.price || 0),
-        formatCurrency((product.currentStock || 0) * (product.price || 0)),
+        String(product.code || ''),
+        String(product.name || ''),
+        String(product.categoryName || product.category || 'Sem categoria'),
+        Number(product.currentStock || 0).toString(),
+        Number(product.minStock || 0).toString(),
+        formatCurrency(Number(product.salePrice || product.cashPrice || product.price || 0)),
+        formatCurrency(Number(product.currentStock || 0) * Number(product.salePrice || product.cashPrice || product.price || 0)),
       ]);
 
       autoTable(doc, {
@@ -521,11 +544,11 @@ export default function Reports() {
       worksheetData = reportData.map((product: any) => ({
         Código: product.code || 'N/A',
         Nome: product.name || 'N/A',
-        Categoria: product.categoryName || 'N/A',
-        'Estoque Atual': product.currentStock || 0,
-        'Estoque Mínimo': product.minStock || 0,
-        'Preço Venda': product.salePrice || 0,
-        'Valor em Estoque': (product.currentStock || 0) * (product.salePrice || 0),
+        Categoria: product.categoryName || product.category || 'N/A',
+        'Estoque Atual': Number(product.currentStock || 0),
+        'Estoque Mínimo': Number(product.minStock || 0),
+        'Preço Venda': Number(product.salePrice || product.cashPrice || product.price || 0),
+        'Valor em Estoque': Number(product.currentStock || 0) * Number(product.salePrice || product.cashPrice || product.price || 0),
       }));
     } else if (reportType === 'cashflow') {
       worksheetData = reportData.map((cash: any) => ({
@@ -738,7 +761,7 @@ export default function Reports() {
                       <div className="p-4 bg-white/5 rounded">
                         <p className="text-white/70 text-sm">Valor em Estoque</p>
                         <p className="text-2xl font-bold text-green-400">
-                          R$ {summary.totalStockValue?.toFixed(2)}
+                          R$ {formatCurrency(summary.totalStockValue || 0)}
                         </p>
                       </div>
                     </>
@@ -894,20 +917,20 @@ export default function Reports() {
                           <TableRow key={product.id} className="border-white/10">
                             <TableCell className="text-white/90 font-mono">{product.code}</TableCell>
                             <TableCell className="text-white/90">{product.name}</TableCell>
-                            <TableCell className="text-white/70">{product.category}</TableCell>
+                            <TableCell className="text-white/70">{product.categoryName || product.category || 'Sem categoria'}</TableCell>
                             <TableCell className={`text-center font-semibold ${
                               (product.currentStock || 0) <= (product.minStock || 0) 
                                 ? 'text-red-400' 
                                 : 'text-white/90'
                             }`}>
-                              {product.currentStock || 0}
+                              {Number(product.currentStock || 0)}
                             </TableCell>
-                            <TableCell className="text-white/70 text-center">{product.minStock || 0}</TableCell>
+                            <TableCell className="text-white/70 text-center">{Number(product.minStock || 0)}</TableCell>
                             <TableCell className="text-white/90 text-right">
-                              R$ {product.price?.toFixed(2)}
+                              R$ {formatCurrency(Number(product.salePrice || product.cashPrice || product.price || 0))}
                             </TableCell>
                             <TableCell className="text-green-400 font-bold text-right">
-                              R$ {((product.currentStock || 0) * (product.price || 0))?.toFixed(2)}
+                              R$ {formatCurrency(Number(product.currentStock || 0) * Number(product.salePrice || product.cashPrice || product.price || 0))}
                             </TableCell>
                           </TableRow>
                         ))}
